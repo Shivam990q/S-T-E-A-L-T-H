@@ -1,13 +1,29 @@
-# 🛡️ S-T-E-A-L-T-H (v7.0 Absolute)
+# 🛡️ S-T-E-A-L-T-H (v8.0 ABSOLUTE)
 
-> **Absolute Forensic Annihilation, Windows Deep Privacy & Hardware/ID Spoofing Suite**  
-> Native C# WPF Desktop GUI with Real-Time System HUD, 34 Defense Vectors, 90+ Micro-Action Triggers, and Standalone PowerShell Automation Core.
+> **Absolute Forensic Annihilation, Windows Deep Privacy & Identity Suite**
+> Native C# WPF GUI · **46 Vectors · 161 Granular Actions** · Dry-Run Preview · Automatic Backup & Restore · File Quarantine · 3-Pass Shredder · Read-Only Privacy Audit · Task Scheduler · Headless CLI
 
 ---
 
-## 🌟 Overview
+## 🌟 What's new in v8.0
 
-**S-T-E-A-L-T-H v7.0** is an enterprise-grade Windows privacy, anti-forensics, and identity camouflage suite. It is engineered to perform surgical and deep sanitization across modern Windows systems (Windows 10 & 11), neutralizing telemetry trackers, forensic execution artifacts, hardware identifiers, and OS surveillance mechanisms.
+v7.0 had 34 vectors whose "[OK]" messages were printed even when operations silently failed. v8.0 is a ground-up re-engineering:
+
+| Area | v7.0 | v8.0 |
+| :--- | :--- | :--- |
+| Execution honesty | `SilentlyContinue` everywhere, always "[OK]" | Every op returns OK / FAIL / SKIP with a real reason; live counters in HUD |
+| Safety net | none (destructive & irreversible) | Automatic `reg export` backup before every key mutation; files moved to **quarantine** (restorable) instead of deleted; one-click **Restore Session** |
+| Preview | none | **Dry-Run mode** — every planned operation is listed, nothing is touched |
+| ShellBags | only dialog MRUs (BagMRU untouched!) | Real `BagMRU` + `Bags` keys + dialog MRUs |
+| Event logs | 5 channels | Named channels + **Defender Operational** + **sweep of ALL channels** |
+| Cloud clipboard | current clipboard only | `AllowClipboardHistory` + `AllowCrossDeviceClipboard` policies |
+| Recall (Win11 24H2) | legacy keys only | **`DisableAIDataAnalysis`** (authoritative 24H2 policy) + legacy + snapshot purge |
+| SRUM | SRUDB.dat only (ESE logs survived) | Full ESE set: `.dat` + `.log` + `.chk` |
+| Defender | direct folder pokes (Tamper blocks) | **`Remove-MpThreat`** API first, then folders; honest failure reporting |
+| Browsers | `Default` profile only | **All profiles** (`Default`, `Profile 1..N`, Guest) |
+| Crash dumps | minidumps/WER | + `MEMORY.DMP` + `DedicatedDumpFile` + optional `CrashDumpEnabled=0` |
+| IDE resets | ID rotation only | + **telemetry forced off** in `settings.json` (backup taken first) |
+| New vectors | — | 12 new categories (33–44) below |
 
 ---
 
@@ -15,178 +31,116 @@
 
 | Specification | Details |
 | :--- | :--- |
-| **Current Version** | **v7.0 ABSOLUTE** |
-| **Forensic Vectors** | **34 Comprehensive Vectors** (0, 00, 1 through 32) |
-| **Granular Controls** | **90+ Individual Micro-Execution Buttons** |
-| **Primary Interface** | Native C# WPF Dark GUI with Live System HUD & Thread-Safe Async Logger |
-| **Secondary Engine** | Standalone 12-Vector PowerShell Core Engine (`S-T-E-A-L-T-H.ps1`) |
-| **Test Framework** | Diagnostic Validation Test Suite (`S-T-E-A-L-T-H_test.exe`) |
-| **Supported OS** | Windows 10 & Windows 11 (x64) |
-| **Required Privileges** | Administrator / Elevated UAC |
+| Version | **v8.0 ABSOLUTE** |
+| Vectors | **46 categories** (0, 00, 1–32 original + 33–44 new) |
+| Granular actions | **161** micro-action buttons |
+| Interface | WPF dark GUI: live HUD, result counters, search filter, 5 modals |
+| Engine | Central Kernel: registry / files / services / processes with Dry-Run + backup hooks |
+| Backup store | `C:\ProgramData\STEALTH\backups\session-YYYYMMDD-HHMMSS\` |
+| Profiles | 🟢 Safe · 🟡 Balanced · 🔴 Paranoid (destructive) |
+| CLI | `/sweep /profile:X /dry` · `/audit /out:...` · `/restore /dir:...` |
+| Supported OS | Windows 10 & 11 (x64), elevation required for most vectors |
+| Build | .NET Framework 4.x `csc.exe` (C# 5) — see `build.ps1` |
 
 ---
 
-## 🚀 Complete 34-Vector Architectural Matrix
+## 🗂️ The 46-Vector Matrix
 
-### 👑 Identity, Hardware & AI Spoofing Vectors
-* **Vector 0: Windows Machine GUID, Identity & PC Name Spoof**
-  * `0.1 MachineGuid`: Generates randomized cryptographically secure GUID in `HKLM:\SOFTWARE\Microsoft\Cryptography`.
-  * `0.2 SQM MachineId`: Spoofs Software Quality Metrics client GUID.
-  * `0.3 Registered Owner`: Replaces registered user and organization metadata strings.
-  * `0.4 Custom PC/Host Name`: Custom computer name and hostname rotation dialog.
-* **Vector 00: Cursor & AI IDE Machine ID Resetter**
-  * `devDeviceId`: Randomizes developer device hardware tokens.
-  * `macMachineId`: Replaces physical MAC-derived telemetry hashes.
-  * `machineId`: Generates fresh SHA-256 machine identifier.
-  * `sqmId`: Rotates SQM tracking telemetry ID.
-  * `serviceMachineId`: Regenerates service-layer tokens in IDE `storage.json`.
+### 👑 Identity & Spoofing (Gold)
+- **0 — Machine GUID / SQM / Registered Owner / PC Rename** (per-action + random stealth names)
+- **00 — Cursor / VS Code `storage.json` ID reset** (`devDeviceId`, `macMachineId`, `machineId`, `sqmId`) + **telemetry forced off** in `settings.json`
 
-### 🛡️ Windows Telemetry & Cloud Snooping
-* **Vector 1: Deep Windows Telemetry & CEIP Silencer**
-  * Disables `DiagTrack` (Connected User Experiences and Telemetry), `dmwappushservice`, and `WerSvc`.
-  * Neutralizes Advertising ID, Inking/Typing telemetry dictionaries, and Defender cloud sample uploads.
-* **Vector 2: Windows Timeline SQLite Database Purge**
-  * Obliterates `ActivitiesCache.db` SQLite database in `ConnectedDevicesPlatform`.
-  * Disables Activity Feed publishing and Microsoft Account activity synchronization.
-* **Vector 11: P2P Delivery Optimization & SmartScreen Probing**
-  * Locks `DODownloadMode` to `0` (disables P2P bandwidth harvesting).
-  * Suppresses Microsoft SmartScreen outbound file reputation probes.
-* **Vector 26: OneDrive Telemetry & Sync Logs**
-  * Purges OneDrive diagnostic logs, telemetry event caches, and update records.
-* **Vector 27: Windows Recall AI, Copilot & Snapshots (Win11)**
-  * Permanently disables Windows Recall AI screenshot tracking and indexing.
-  * Terminates Copilot shell integration and wipes stored screen snapshots.
-* **Vector 28: Scheduled Task Telemetry Killswitch**
-  * Disables Microsoft Compatibility Appraiser, ProgramDataUpdater, and Customer Experience Improvement tasks (Consolidator, KernelCeip, UsbCeip).
+### 🛡️ Telemetry & Cloud (1, 2, 11, 26–28, 36, 39, 44)
+DiagTrack/CEIP silencer · Timeline DB · Delivery-Opt + SmartScreen · OneDrive logs · **Recall 24H2 (`DisableAIDataAnalysis`) + Copilot + snapshot purge** · Scheduled-task killswitch · **Privacy toggle pack** (widgets via `Dsh` policy, sponsored content, online speech, feedback, Find-My-Device, background apps, Start recommendations, tailored experiences, Steps Recorder) · **Vendor telemetry** (VS CEIP, Office OSM, .NET CLI opt-out, NVIDIA service, npm/pip logs) · **Legacy WER/CEIP consent locks**
 
-### 🧹 Execution Traces & Anti-Forensic Annihilation
-* **Vector 3: Terminal, PowerShell & RunMRU Command History Sanitizer**
-  * Wipes `ConsoleHost_history.txt` (PSReadLine history).
-  * Purges Windows Run dialog (`Win+R`) `RunMRU` registry history.
-* **Vector 4: ShellBags, OpenSaveMRU & Dialog Execution History**
-  * Sanitizes `OpenSavePidlMRU` and `LastVisitedPidlMRU` registry keys.
-  * Erases File Explorer search queries (`WordWheelQuery`).
-* **Vector 5: JumpLists & Recent Items MRU Purge**
-  * Removes `AutomaticDestinations` and `CustomDestinations` JumpList caches.
-  * Empties user Recent Items shortcuts.
-* **Vector 6: Visual Thumbnails & DirectX Shader Caches**
-  * Deletes Windows thumbnail cache databases (`thumbcache_*.db`).
-  * Cleans compiled DirectX shader caches (`D3DSCache`) and wipes the system clipboard.
-* **Vector 7: Crash Dumps & Windows Error Reporting (WER)**
-  * Deletes kernel minidumps, `LiveKernelReports`, WER report queues, and AppCrash dumps.
-* **Vector 8: Cryptnet SSL/TLS Certificate URL Leak Cache**
-  * Purges `CryptnetUrlCache\Content` and `CryptnetUrlCache\MetaData` to prevent certificate domain leaks.
-* **Vector 9: Windows Security, System & PowerShell Event Logs**
-  * Clears Security, System, Application, and PowerShell Operational event logs via `wevtutil`.
-* **Vector 13: Prefetch & SuperFetch Execution Traces**
-  * Deletes all `.pf` prefetch files, sets Prefetcher policy to `0`, and stops `SysMain`.
-* **Vector 14: AmCache Execution History (SHA-1 Hash Logs)**
-  * Clears `Amcache.hve` execution records and `RecentFileCache.bcl`.
-* **Vector 15: ShimCache (AppCompatCache) Binary Execution Log**
-  * Wipes `AppCompatCache` from SYSTEM hive tracking binary executions and paths.
-* **Vector 16: UserAssist GUI Execution Tracking (ROT13)**
-  * Cleans ROT13-encoded GUI execution history and disables `Start_TrackProgs`.
-* **Vector 17: Background & Desktop Activity Monitor (BAM / DAM)**
-  * Removes BAM/DAM registry timestamps logging execution times of background processes.
-* **Vector 18: System Resource Usage Monitor (SRUM) Database**
-  * Stops Data Protection Service (`DPS`) and wipes `SRUDB.dat` tracking app resource/network consumption.
-* **Vector 19: TypedPaths, TypedURLs & MUICache Execution**
-  * Clears Explorer typed folder paths, legacy browser typed URLs, and `MUICache` binary names.
-* **Vector 20: RecentDocs Registry & LNK Shortcut Files**
-  * Purges `RecentDocs` MRU lists and erases `.lnk` shortcut files.
-* **Vector 21: Windows Push Notification Database (WPN)**
-  * Halts WPN services and removes `wpndatabase.db`.
-* **Vector 22: Remote Desktop Bitmap Cache & Server History**
-  * Clears RDP bitmap cache tiles (`bcache*.bmc`), server MRUs, and connection `.rdp` files.
-* **Vector 24: Windows Defender Detection & Quarantine History**
-  * Clears local Defender scan history, detection caches, and quarantined items.
-* **Vector 25: Cortana, Search History & Search Index**
-  * Disables Cortana, wipes device search history, and rebuilds Windows Search index.
+### 🧹 Forensic Artifacts (3–10, 12–25, 30, 32, 34, 35)
+Terminal/RunMRU/Windows-Terminal history · **REAL ShellBags** · JumpLists · thumbnails/D3D/**cloud clipboard policies** · crash dumps + MEMORY.DMP · Cryptnet SSL cache · **event logs incl. Defender + ALL-channel sweep** · network stealth (DNS/ARP/LLMNR/WPAD/IPv6 privacy) · browser caches (all profiles) · Prefetch/SysMain · AmCache · ShimCache · UserAssist · BAM/DAM · **SRUM full ESE set** · TypedPaths/URLs/MUICache · RecentDocs/LNK · Notifications DB · RDP artifacts · WiFi profiles (destructive) · **Defender via API** · Cortana/Search · icon+font cache · sensor consent reset · **USN journal + TrayNotify** · **NetworkList / USBSTOR / MountPoints2 / MountedDevices / Bluetooth history**
 
-### 🌐 Network, System & Hardware Hardening
-* **Vector 10: Network & Identity Stealth (DNS, ARP, LLMNR, WPAD)**
-  * Flushes DNS cache, clears ARP table, and disables LLMNR and WPAD multicast lookups.
-* **Vector 12: Multi-Browser GPU, Shader & Temporary Caches**
-  * Cleans temp cache and shader cache across Chrome, Brave, Edge, and Firefox.
-* **Vector 23: WiFi Profile History & AutoConnect Settings**
-  * Removes saved WiFi profiles and disables automatic open-network connections.
-* **Vector 29: Forensic Hardening (Pagefile, Hibernation & NTFS)**
-  * Enables `ClearPageFileAtShutdown`, disables hibernation (deletes `hiberfil.sys`), and turns off NTFS `LastAccess` timestamps.
-* **Vector 30: Icon Cache & Windows Font Cache Rebuild**
-  * Rebuilds Explorer icon cache and purges `FNTCACHE.DAT`.
-* **Vector 31: PowerShell Transcript, Module & ScriptBlock Logging**
-  * Enforces registry policies to disable PS ScriptBlock logging, Module logging, and Transcription.
-* **Vector 32: CapabilityAccessManager Sensor Permissions Reset**
-  * Resets Location, Camera, and Microphone access histories and applies global sensor restrictions.
+### 🗄️ Storage, Secure Deletion & System (29, 33, 38, 40)
+Pagefile/hibernation/LastAccess hardening · **VSS shadows + System Restore + RegBack + Windows.old** (destructive) · **3-pass shredder + free-space wipe (`cipher /w`) + TEMP sweeps + `$Recycle.Bin` shred** · **CBS/WU-cache/Panther/WDI/spooler/StickyNotes/GameDVR/speech-trained-data/targeted-content/SystemPowerReports sweeps**
+
+### 🌐 Network Blocking & Browsers (37, 41, 42, 43)
+**Telemetry hosts block (33 domains, marked & removable) + auto-DoH** · **browser history/cookies erase (all profiles, destructive)** · **taskbar/shell surface reduction** (search highlights, chat/copilot buttons, Meet Now — with UCPD caveats documented) · **developer shell traces** (`.bash_history`, WSL histories, REPL files)
+
+### ⚙️ Engineering (31, 32 included above; plus suite-level)
+PowerShell logging killswitch (with security-tradeoff note) · sensor permissions · plus suite-level features: dry-run, backup/restore, quarantine, shredder, audit report, scheduler, search filter, honest counters, CLI mode.
 
 ---
 
-## ⚡ 1-Click Master Protocol
+## ⚡ Using the GUI
 
-Clicking **"⚡ INITIATE 32-VECTOR PROTOCOL ⚡"** in the GUI triggers a coordinated, non-blocking asynchronous pipeline that iterates through every vector in sequence, streaming status messages live into the integrated terminal HUD with millisecond precision.
+1. Run `S-T-E-A-L-T-H.exe` **as Administrator** (non-elevated runs warn and report failures honestly).
+2. Pick a **profile**:
+   - 🟢 **Safe** — only safe actions
+   - 🟡 **Balanced** — everything non-destructive (default)
+   - 🔴 **Paranoid** — includes destructive actions (WiFi wipe, browser history, VSS deletion, free-space wipe)
+3. Optional: toggle **DRY-RUN** to preview every planned operation with zero changes.
+4. Hit **⚡ INITIATE 46-VECTOR PROTOCOL** or run individual micro-actions / category "Run All" (category masters skip destructive actions).
+5. Every line in the stream is a real result: `[OK]`, `[FAIL]` (with reason), or `[SKIP]`. Counters live in the HUD.
 
----
+**Toolbar tools:**
+- **📊 PRIVACY AUDIT** — read-only HTML report to your Desktop (services, policies, artifacts present, hosts/DoH state, SSD detection) — changes nothing.
+- **↩ RESTORE SESSION** — pick any backup session; re-imports every exported `.reg` and moves quarantined files back.
+- **⏰ SCHEDULER** — registers a daily headless sweep (Task Scheduler, highest privileges) for the chosen profile.
+- **🔥 SHRED PATH…** — 3-pass overwrite (random / 0xFF / 0x00) + truncate + delete for any file/folder you paste.
+- **👑 PC NAME SPOOF** — custom/random host rename + RegisteredOwner/Org rewrite.
 
-## 📂 Repository Contents
+**Search box** filters the 46 cards live by number, tag, title or action name.
 
-```
-S-T-E-A-L-T-H/
-├── S-T-E-A-L-T-H.exe        # Pre-compiled Standalone WPF Desktop GUI (v7.0 Absolute)
-├── S-T-E-A-L-T-H.cs         # Full C# WPF Application source code (1,387 lines)
-├── S-T-E-A-L-T-H.ps1        # Standalone 12-Vector PowerShell Core Engine (360 lines)
-├── S-T-E-A-L-T-H_test.exe   # Diagnostic Validation Test Executable
-├── S-T-E-A-L-T-H_test.cs    # Test Suite source code
-├── README.md                # Comprehensive Architecture & Vector Documentation
-└── .gitignore               # System & compilation filter configuration
-```
-
----
-
-## 🛠️ Build & Compilation Instructions
-
-To build `S-T-E-A-L-T-H.exe` from source using the built-in Microsoft .NET Framework C# compiler (`csc.exe`):
+## 💻 Headless CLI
 
 ```powershell
-# Navigate to directory
-cd "C:\Users\Rose\.gemini\antigravity-ide\S-T-E-A-L-T-H"
+# preview (no changes, works even where shells mangle leading-slash args):
+.\S-T-E-A-L-T-H.exe /sweep /profile:Safe /dry
 
-# Compile with native WPF presentation assemblies
-& "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe" `
-    /target:winexe `
-    /out:S-T-E-A-L-T-H.exe `
-    /reference:PresentationFramework.dll `
-    /reference:PresentationCore.dll `
-    /reference:WindowsBase.dll `
-    /reference:System.Xaml.dll `
-    /reference:System.dll `
-    /reference:System.Core.dll `
-    /reference:System.Windows.Forms.dll `
-    /reference:Microsoft.CSharp.dll `
-    S-T-E-A-L-T-H.cs
+# real Balanced sweep with backup + quarantine:
+.\S-T-E-A-L-T-H.exe /sweep /profile:Balanced
+
+# everything including destructive (Paranoid):
+.\S-T-E-A-L-T-H.exe /sweep /profile:Paranoid
+
+# read-only audit report:
+.\S-T-E-A-L-T-H.exe /audit /out:"C:\temp\report.html"
+
+# restore a backup session:
+.\S-T-E-A-L-T-H.exe /restore /dir:"C:\ProgramData\STEALTH\backups\session-20260917-030933"
 ```
+
+## 🛠️ Build
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build.ps1          # build both exes
+powershell -ExecutionPolicy Bypass -File .\build.ps1 -RunTests # build + run test suite
+```
+
+Manual (single line per compile):
+```powershell
+& "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe" -nologo -target:winexe `
+  "-out:S-T-E-A-L-T-H.exe" `
+  "-r:$env:WINDIR\Microsoft.NET\assembly\GAC_MSIL\PresentationFramework\v4.0_4.0.0.0__31bf3856ad364e35\PresentationFramework.dll" `
+  "-r:$env:WINDIR\Microsoft.NET\assembly\GAC_64\PresentationCore\v4.0_4.0.0.0__31bf3856ad364e35\PresentationCore.dll" `
+  "-r:$env:WINDIR\Microsoft.NET\assembly\GAC_MSIL\WindowsBase\v4.0_4.0.0.0__31bf3856ad364e35\WindowsBase.dll" `
+  "-r:$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\System.Xaml.dll" `
+  "-r:System.dll" "-r:System.Core.dll" S-T-E-A-L-T-H.cs
+```
+
+## 🧪 Testing (sandbox-safe)
+
+`S-T-E-A-L-T-H_test.exe` runs **15 tests** and — unlike v7's live-fire suite — does **not** damage the system:
+
+1. Window + XAML tree resolution · 2. registry integrity (46 cats / unique nums / all actions carry Info) · 3. **full 161-action dry-run sweep** · 4. registry engine roundtrip in `HKCU\Software\STEALTH_TEST` · 5. **reg backup → mutate → restore** roundtrip · 6. file quarantine → restore · 7. shredder destroys content · 8. DirWipe preserves folder · 9. honest stdout/exit-code capture · 10. hosts state detection (read-only) · 11. real HTML audit generation · 12. scheduler query (read-only) · 13. all 46 cards + toolbar + modals wired · 14. **dry-run guard actually blocks writes** · 15. headless CLI dry sweep child-process smoke test.
 
 ---
 
-## 💻 How to Run
+## ⚠️ Known Constraints (by design, documented honestly)
 
-### 1. Launching GUI (Recommended):
-Double-click `S-T-E-A-L-T-H.exe` or execute from PowerShell with elevated privileges:
-```powershell
-Start-Process -FilePath ".\S-T-E-A-L-T-H.exe" -Verb RunAs
-```
-
-### 2. Launching Standalone PowerShell Core:
-```powershell
-powershell -ExecutionPolicy Bypass -File .\S-T-E-A-L-T-H.ps1
-```
-
-### 3. Running Diagnostic Tests:
-```powershell
-.\S-T-E-A-L-T-H_test.exe
-```
-
----
+- **Elevation**: non-admin runs make protected operations FAIL loudly instead of pretending.
+- **Event 1102**: clearing the Security log always writes a "log cleared" event — unavoidable, documented.
+- **Tamper Protection**: Defender history folders may refuse deletes even elevated — the tool reports it and uses the `Remove-MpThreat` API where possible.
+- **UCPD**: Windows 11's User Choice Protection Driver resets some per-user `Taskbar*` values; the `Dsh` policy (Cat 36) is the authoritative widget kill.
+- **SSD shredding**: wear-leveling makes overwrite-based wiping best-effort on SSDs; the auditor reports your disk media type.
+- **Reboot-gated actions** are tagged in each card's SPECS modal (ShimCache, pagefile, PC rename, MountedDevices…).
+- **Deliberately excluded**: EDR/AV evasion, timestomping, log forgery, HWID/driver-level spoofing. This is a privacy tool for machines you own — not a malware toolkit.
 
 ## 🔒 Security & Privacy Notice
-* Developed strictly for authorized privacy enhancement, digital hygiene, and defensive security auditing.
-* Running with Administrator privileges ensures deep registry and protected folder access.
+For authorized privacy enhancement, digital hygiene and defensive auditing on systems you own. All registry mutations are export-backed; all file removals are quarantined and restorable via the built-in Restore Session tool.

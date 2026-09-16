@@ -1,12 +1,19 @@
+// ============================================================================================
+// S-T-E-A-L-T-H v8.0 — SANDBOX-SAFE TEST RUNNER
+// Unlike the v7 live-fire suite, these tests do NOT damage the running system:
+//   - registry tests run inside a self-created HKCU\Software\STEALTH_TEST sandbox key
+//   - file tests run inside %TEMP%\STEALTH_TEST sandbox folder
+//   - every action lambda is exercised in DRY-RUN mode (preview, no mutation)
+//   - backup/quarantine/restore is verified end-to-end on sandbox files only
+// ============================================================================================
+
 using System;
 using System.IO;
-using System.Text;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Markup;
-using System.Windows.Threading;
-using System.Threading;
+using System.Collections.Generic;
 using System.Diagnostics;
+using Microsoft.Win32;
 
 namespace STEALTH
 {
@@ -14,6 +21,7 @@ namespace STEALTH
     {
         private static int passed = 0;
         private static int failed = 0;
+        private static List<string> failDetails = new List<string>();
 
         private static void AssertTest(string testName, Action testAction)
         {
@@ -32,7 +40,14 @@ namespace STEALTH
                 Console.WriteLine("FAILED -> " + ex.Message);
                 Console.ResetColor();
                 failed++;
+                failDetails.Add(testName + " :: " + ex.Message);
             }
+        }
+
+        private static void Expect(OpResult r, string what)
+        {
+            if (r == null) throw new Exception(what + " returned null OpResult");
+            if (!r.Ok) throw new Exception(what + " failed: " + r.Detail);
         }
 
         [STAThread]
@@ -40,214 +55,265 @@ namespace STEALTH
         {
             Console.ForegroundColor = ConsoleColor.Cyan;
             Console.WriteLine("===================================================================");
-            Console.WriteLine(" S-T-E-A-L-T-H v7.0 - 32-VECTOR DEEP AUTOMATED TEST RUNNER");
+            Console.WriteLine(" S-T-E-A-L-T-H v8.0 - 46-VECTOR SANDBOX-SAFE TEST RUNNER");
+            Console.WriteLine(" (no system damage: dry-run + self-cleaning sandbox keys/files)");
             Console.WriteLine("===================================================================");
             Console.ResetColor();
 
+            string sandboxKey = "HKCU\\Software\\STEALTH_TEST";
+            string sandboxDir = Path.Combine(Path.GetTempPath(), "STEALTH_TEST");
             MainWindow window = null;
+            int totalActions = 0;
 
-            // Test 1: Window Instantiation & XAML Tree Resolution
-            AssertTest("1. Window Instantiation & XAML Tree Resolution", delegate() {
-                var app = new Application();
+            Kernel.Log = delegate(string m) { };
+
+            // Test 1: window + XAML tree
+            AssertTest("1. Window Instantiation & XAML Tree Resolution", delegate()
+            {
                 window = new MainWindow();
                 if (window == null) throw new Exception("MainWindow is null");
             });
 
-            // Test 2: Essential Controls & Buttons Verification
-            AssertTest("2. Essential Controls & 32-Vector Master Controls Check", delegate() {
-                var root = (UIElement)window.Content;
-                string[] requiredControls = new string[] {
-                    "TitleBar", "BtnClose", "BtnMin", "BtnMax", "BtnMasterRun",
-                    "TxtHost", "TxtNet", "TxtRam", "TxtTelem", "TxtLogs", "Scroller", "PrgBar",
-                    "InfoModal", "TxtModalTitle", "TxtModalDesc", "TxtModalPaths", "BtnCloseModal", "BtnModalGotIt",
-                    "PcNameModal", "TxtNewPcName", "BtnApplyPcName", "BtnRandomPcName", "BtnClosePcModal", "BtnApplyVirtualIdentity",
-                    "BtnSpoofMachine", "BtnSpoofCursor", "BtnV1", "BtnV2", "BtnV3", "BtnV4",
-                    "BtnV5", "BtnV6", "BtnV7", "BtnV8", "BtnV9", "BtnV10", "BtnV11", "BtnV12",
-                    "BtnV13", "BtnV14", "BtnV15", "BtnV16", "BtnV17", "BtnV18", "BtnV19", "BtnV20",
-                    "BtnV21", "BtnV22", "BtnV23", "BtnV24", "BtnV25", "BtnV26", "BtnV27", "BtnV28",
-                    "BtnV29", "BtnV30", "BtnV31", "BtnV32"
-                };
-
-                foreach (var name in requiredControls)
+            // Test 2: registry structure integrity
+            AssertTest("2. Action Registry: 46 Categories, Unique Nums, All Actions Runnable", delegate()
+            {
+                List<Category> cats = ActionRegistry.Build();
+                if (cats.Count != 46) throw new Exception("expected 46 categories, got " + cats.Count);
+                HashSet<string> seenNums = new HashSet<string>();
+                foreach (Category c in cats)
                 {
-                    var node = LogicalTreeHelper.FindLogicalNode(root, name);
-                    if (node == null) throw new Exception("Required control '" + name + "' was not found in visual tree!");
+                    if (!seenNums.Add(c.Num)) throw new Exception("duplicate category num " + c.Num);
+                    if (c.Actions.Count == 0) throw new Exception("category " + c.Num + " has no actions");
+                    foreach (StealthAction a in c.Actions)
+                    {
+                        totalActions++;
+                        if (a.Run == null) throw new Exception("action " + c.Num + "/" + a.Num + " has null Run");
+                        if (string.IsNullOrEmpty(a.Info)) throw new Exception("action " + c.Num + "/" + a.Num + " missing Info");
+                    }
+                }
+                Console.Write("(46 cats, " + totalActions + " actions) ");
+            });
+
+            // Test 3: every action executes safely in DRY-RUN
+            AssertTest("3. FULL DRY-RUN SWEEP: every action previewed without mutation", delegate()
+            {
+                Kernel.DryRun = true;
+                Kernel.BackupOn = true;
+                Kernel.QuarantineOn = true;
+                int ran = 0, bad = 0;
+                List<Category> cats = ActionRegistry.Build();
+                foreach (Category c in cats)
+                {
+                    foreach (StealthAction a in c.Actions)
+                    {
+                        try
+                        {
+                            OpResult r = a.Run(true);
+                            if (r == null) bad++;
+                            else ran++;
+                        }
+                        catch (Exception ex)
+                        {
+                            bad++;
+                            Console.Write("\n   [DRY-CRASH] " + c.Num + "/" + a.Num + ": " + ex.Message);
+                        }
+                    }
+                }
+                Kernel.DryRun = false;
+                if (bad > 0) throw new Exception(bad + " actions crashed in dry-run");
+                if (ran < totalActions) throw new Exception("ran " + ran + " < total " + totalActions);
+                Console.Write("(" + ran + " actions previewed) ");
+            });
+
+            // Test 4: Kernel registry ops in sandbox key
+            AssertTest("4. Kernel Registry Engine: set/get/delete-tree in sandbox key", delegate()
+            {
+                Expect(Kernel.RegSet(sandboxKey, "TestValue", 42, RegistryValueKind.DWord), "RegSet");
+                object v = Kernel.RegGet(sandboxKey, "TestValue");
+                if (v == null || v.ToString() != "42") throw new Exception("value roundtrip failed: " + v);
+                Expect(Kernel.RegSet(sandboxKey + "\\Sub", "Nested", "yes", RegistryValueKind.String), "RegSet nested");
+                if (!Kernel.RegExists(sandboxKey + "\\Sub")) throw new Exception("nested key missing");
+                Expect(Kernel.RegDeleteTree(sandboxKey), "RegDeleteTree");
+                if (Kernel.RegExists(sandboxKey)) throw new Exception("sandbox key still exists after delete");
+            });
+
+            // Test 5: BackupManager registry export + restore roundtrip
+            AssertTest("5. BackupManager: reg export -> mutate -> restore roundtrip", delegate()
+            {
+                Kernel.RegSet(sandboxKey, "BeforeBackup", "original", RegistryValueKind.String);
+                BackupManager bm = new BackupManager();
+                bm.StartSession();
+                if (bm.SessionDir == null) throw new Exception("session dir could not be created (ProgramData write denied?)");
+                Kernel.Backup = bm;
+                // this mutation triggers automatic backup
+                Expect(Kernel.RegSet(sandboxKey, "BeforeBackup", "changed", RegistryValueKind.String), "RegSet after backup");
+                object v = Kernel.RegGet(sandboxKey, "BeforeBackup");
+                if (v.ToString() != "changed") throw new Exception("mutation did not apply");
+                Kernel.Backup = null;
+                BackupManager.Restore(bm.SessionDir, delegate(string m) { });
+                v = Kernel.RegGet(sandboxKey, "BeforeBackup");
+                if (v == null || v.ToString() != "original") throw new Exception("restore did not revert value (got " + v + ")");
+                Kernel.RegDeleteTree(sandboxKey);
+            });
+
+            // Test 6: file sandbox + quarantine roundtrip
+            AssertTest("6. File Engine: delete-with-quarantine -> restore", delegate()
+            {
+                Directory.CreateDirectory(sandboxDir);
+                string f = Path.Combine(sandboxDir, "quar_me.txt");
+                File.WriteAllText(f, "precious data");
+                BackupManager bm = new BackupManager();
+                bm.StartSession();
+                if (bm.SessionDir == null) throw new Exception("no session dir");
+                Kernel.Backup = bm;
+                OpResult r = Kernel.FileDelete(f);
+                if (!r.Ok) throw new Exception("FileDelete failed: " + r.Detail);
+                if (File.Exists(f)) throw new Exception("file still present after delete");
+                Kernel.Backup = null;
+                bm.FinishSession(); // write manifest so Restore can map quarantined files back
+                BackupManager.Restore(bm.SessionDir, delegate(string m) { });
+                if (!File.Exists(f)) throw new Exception("file not restored from quarantine");
+                if (File.ReadAllText(f) != "precious data") throw new Exception("restored content mismatch");
+                File.Delete(f);
+            });
+
+            // Test 7: shredder destroys file content beyond recovery
+            AssertTest("7. Shredder: 3-pass overwrite + delete", delegate()
+            {
+                Directory.CreateDirectory(sandboxDir);
+                string f = Path.Combine(sandboxDir, "shred_me.bin");
+                byte[] data = new byte[8192];
+                new Random().NextBytes(data);
+                File.WriteAllBytes(f, data);
+                OpResult r = Kernel.ShredFile(f);
+                if (!r.Ok) throw new Exception("shred failed: " + r.Detail);
+                if (File.Exists(f)) throw new Exception("shredded file still exists");
+            });
+
+            // Test 8: DirWipe keeps folder, empties content
+            AssertTest("8. DirWipe: content cleared, folder preserved", delegate()
+            {
+                Directory.CreateDirectory(Path.Combine(sandboxDir, "wipe_me"));
+                File.WriteAllText(Path.Combine(sandboxDir, "wipe_me", "a.txt"), "x");
+                File.WriteAllText(Path.Combine(sandboxDir, "wipe_me", "b.txt"), "y");
+                OpResult r = Kernel.DirWipe(Path.Combine(sandboxDir, "wipe_me"));
+                if (!r.Ok) throw new Exception("DirWipe failed: " + r.Detail);
+                if (Directory.GetFiles(Path.Combine(sandboxDir, "wipe_me")).Length != 0) throw new Exception("folder not empty");
+                if (!Directory.Exists(Path.Combine(sandboxDir, "wipe_me"))) throw new Exception("folder itself was removed (should be preserved)");
+            });
+
+            // Test 9: ProcRunner honest capture
+            AssertTest("9. ProcRunner: exit code + stdout + stderr captured", delegate()
+            {
+                ProcResult r = ProcRunner.Run("cmd.exe", "/c echo STEALTH_HELLO", 10000);
+                if (r.Code != 0) throw new Exception("exit code " + r.Code);
+                if (!r.Out.Contains("STEALTH_HELLO")) throw new Exception("stdout missing: '" + r.Out + "'");
+            });
+
+            // Test 10: HostsList read-only integrity (no hosts modification in tests)
+            AssertTest("10. HostsList: state detection + domain list integrity", delegate()
+            {
+                bool applied = HostsList.IsApplied(); // read-only
+                if (HostsList.Domains.Length < 30) throw new Exception("domain list suspiciously small");
+                if (!File.Exists(HostsList.HostsPath())) throw new Exception("hosts path unresolvable");
+                Console.Write("(applied=" + applied + ") ");
+            });
+
+            // Test 11: Auditor generates real HTML report
+            AssertTest("11. Auditor: HTML privacy report generation", delegate()
+            {
+                string outPath = Path.Combine(sandboxDir, "audit.html");
+                string res = Auditor.Generate(outPath);
+                if (res.StartsWith("ERROR")) throw new Exception(res);
+                string html = File.ReadAllText(outPath);
+                if (!html.Contains("Privacy & Forensic Audit Report")) throw new Exception("report content missing title");
+                if (!html.Contains("Tracking Services")) throw new Exception("report missing services section");
+                if (!html.Contains("Forensic Artifacts")) throw new Exception("report missing artifacts section");
+            });
+
+            // Test 12: Scheduler state check (read-only)
+            AssertTest("12. Scheduler: task existence query", delegate()
+            {
+                bool exists = Scheduler.Exists();
+                Console.Write("(taskExists=" + exists + ") ");
+            });
+
+            // Test 13: GUI structural checks (controls + search index)
+            AssertTest("13. GUI Controls: master + toolbar + all 46 category cards wired", delegate()
+            {
+                var root = (UIElement)window.Content;
+                string[] required = new string[] {
+                    "TitleBar","BtnClose","BtnMin","BtnMax","BtnMasterRun","BtnAudit","BtnRestore","BtnSchedule","BtnShred","BtnPcName",
+                    "CmbProfile","BtnDry","BtnBackup","BtnQuarantine","TxtSearch",
+                    "TxtHost","TxtNet","TxtTelem","TxtRam","TxtStats","TxtLogs","Scroller","PrgBar",
+                    "InfoModal","TxtModalTitle","TxtModalDesc","TxtModalPaths","BtnCloseModal","BtnModalGotIt",
+                    "PcNameModal","TxtNewPcName","BtnApplyPcName","BtnRandomPcName","BtnClosePcModal","BtnApplyVirtualIdentity",
+                    "RestoreModal","LstSessions","BtnDoRestore","BtnRefreshSessions","BtnOpenSessions","BtnCloseRestore",
+                    "ScheduleModal","TxtSchedTime","CmbSchedProfile","BtnSchedOn","BtnSchedOff","BtnCloseSched",
+                    "ShredModal","TxtShredPath","BtnDoShredFile","BtnDoShredDir","BtnCloseShred"
+                };
+                foreach (string name in required)
+                {
+                    if (LogicalTreeHelper.FindLogicalNode(root, name) == null)
+                        throw new Exception("required control missing: " + name);
+                }
+                int cards = 0;
+                foreach (var fe in FindAll(root, delegate(string n) { return n != null && n.StartsWith("Card_"); })) cards++;
+                if (cards != 46) throw new Exception("expected 46 cards, found " + cards);
+            });
+
+            // Test 14: dry-run guards actually block mutations
+            AssertTest("14. Dry-Run Guard: mutations blocked when Kernel.DryRun=true", delegate()
+            {
+                // defensive: clear any leftover sandbox key from earlier runs
+                bool wasDry = Kernel.DryRun;
+                Kernel.DryRun = false;
+                Kernel.RegDeleteTree(sandboxKey);
+                bool pre = Kernel.RegExists(sandboxKey);
+                Kernel.DryRun = true;
+                Kernel.RegSet(sandboxKey, "ShouldNotExist", 1, RegistryValueKind.DWord);
+                bool post = Kernel.RegExists(sandboxKey);
+                if (post) throw new Exception("dry-run did NOT block registry write! (preExisted=" + pre + ")");
+                Directory.CreateDirectory(sandboxDir);
+                string f = Path.Combine(sandboxDir, "dry_block.txt");
+                File.WriteAllText(f, "keep");
+                Kernel.FileDelete(f);
+                if (!File.Exists(f)) throw new Exception("dry-run did NOT block file delete!");
+                Kernel.DryRun = false;
+                File.Delete(f);
+                if (!wasDry) Kernel.DryRun = false;
+            });
+
+            // Test 15: v8 headless CLI smoke test (dry sweep via child process)
+            AssertTest("15. CLI Headless Mode: /sweep /dry exits cleanly", delegate()
+            {
+                string exe = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "S-T-E-A-L-T-H.exe");
+                if (!File.Exists(exe)) throw new Exception("main exe not found next to test exe");
+                ProcessStartInfo psi = new ProcessStartInfo();
+                psi.FileName = exe;
+                psi.Arguments = "/sweep /profile:Safe /dry";
+                psi.UseShellExecute = false;
+                psi.RedirectStandardOutput = true;
+                psi.CreateNoWindow = true;
+                using (Process p = Process.Start(psi))
+                {
+                    string outp = p.StandardOutput.ReadToEnd();
+                    if (!p.WaitForExit(120000)) throw new Exception("CLI sweep timed out");
+                    if (p.ExitCode != 0) throw new Exception("CLI exit code " + p.ExitCode);
+                    if (!outp.Contains("SWEEP COMPLETE")) throw new Exception("CLI did not print completion summary");
+                    if (!outp.Contains("DRY")) throw new Exception("CLI did not run in dry mode");
                 }
             });
 
-            // Test 3: (i) Info Modal Trigger Verification
-            AssertTest("3. Info Modal Triggers & Content Verification", delegate() {
-                var root = (UIElement)window.Content;
-                var infoModal = (Border)LogicalTreeHelper.FindLogicalNode(root, "InfoModal");
-                var txtTitle = (TextBlock)LogicalTreeHelper.FindLogicalNode(root, "TxtModalTitle");
-                var btnInfo0 = (Button)LogicalTreeHelper.FindLogicalNode(root, "BtnInfo0");
-
-                btnInfo0.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                if (infoModal.Visibility != Visibility.Visible) throw new Exception("InfoModal did not become visible!");
-                if (!txtTitle.Text.Contains("Machine GUID")) throw new Exception("Modal title mismatch!");
-
-                var btnCloseModal = (Button)LogicalTreeHelper.FindLogicalNode(root, "BtnCloseModal");
-                btnCloseModal.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                if (infoModal.Visibility != Visibility.Collapsed) throw new Exception("InfoModal did not close!");
-            });
-
-            // Test 4: Custom PC Name Dialog Verification
-            AssertTest("4. PC Name Spoofer Dialog Trigger", delegate() {
-                var root = (UIElement)window.Content;
-                var pcNameModal = (Border)LogicalTreeHelper.FindLogicalNode(root, "PcNameModal");
-                var btnMicroPcName = (Button)LogicalTreeHelper.FindLogicalNode(root, "BtnMicroPcName");
-                var btnClosePcModal = (Button)LogicalTreeHelper.FindLogicalNode(root, "BtnClosePcModal");
-
-                btnMicroPcName.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                if (pcNameModal.Visibility != Visibility.Visible) throw new Exception("PcNameModal did not become visible!");
-
-                btnClosePcModal.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                if (pcNameModal.Visibility != Visibility.Collapsed) throw new Exception("PcNameModal did not close!");
-            });
-
-            // Test 5: Hardware & Identity Vector (Cat 0 & 00)
-            AssertTest("5. Hardware GUID & Cursor/AI IDE Resetter", delegate() {
-                window.SpoofMachineGuidOnly();
-                window.SpoofSqmIdOnly();
-                window.SpoofRegisteredOwnerAndOrg("STEALTH_OPERATOR");
-                window.ResetCursorKeyOnly("telemetry.devDeviceId");
-            });
-
-            // Test 6: Deep Telemetry & Timeline (Cat 1 & 2)
-            AssertTest("6. Deep Telemetry Silencer & Timeline DB", delegate() {
-                window.SilenceDiagTrackServiceOnly();
-                window.DisableAdvertisingIdOnly();
-                window.DisableInkingTypingOnly();
-                window.DisableDefenderSampleUploadOnly();
-                window.WipeTimelineSqliteDbOnly();
-                window.DisableActivityFeedPolicyOnly();
-            });
-
-            // Test 7: Terminal & ShellBags & JumpLists (Cat 3, 4, 5)
-            AssertTest("7. Terminal History, ShellBags & JumpLists", delegate() {
-                window.ClearPsReadLineHistoryOnly();
-                window.ClearRunMruOnly();
-                window.ClearOpenSaveMruOnly();
-                window.ClearLastVisitedMruOnly();
-                window.ClearWordWheelQueryOnly();
-                window.ClearAutoDestinationsOnly();
-                window.ClearCustomDestinationsOnly();
-                window.ClearRecentFolderOnly();
-            });
-
-            // Test 8: Visual, Crash Dumps & Cryptnet (Cat 6, 7, 8)
-            AssertTest("8. Visual Caches, Crash Dumps & Cryptnet", delegate() {
-                window.ClearThumbnailsOnly();
-                window.ClearD3DShadersOnly();
-                window.ClearClipboardOnly();
-                window.ClearMinidumpsOnly();
-                window.ClearLiveKernelOnly();
-                window.ClearWerQueueOnly();
-                window.ClearAppCrashDumpsOnly();
-                window.ClearCryptnetContentOnly();
-                window.ClearCryptnetMetaOnly();
-            });
-
-            // Test 9: Event Logs & Network & P2P (Cat 9, 10, 11)
-            AssertTest("9. Event Logs, Network Stealth & P2P Disable", delegate() {
-                window.ClearSecurityLogOnly();
-                window.ClearSystemAndAppLogOnly();
-                window.ClearPowerShellLogOnly();
-                window.FlushDnsOnly();
-                window.ClearArpOnly();
-                window.DisableLlmnrOnly();
-                window.DisableDoModeOnly();
-                window.DisableSmartScreenOnly();
-            });
-
-            // Test 10: Multi-Browser Caches (Cat 12)
-            AssertTest("10. Multi-Browser GPU & Temporary Caches", delegate() {
-                window.CleanChromeCacheOnly();
-                window.CleanBraveCacheOnly();
-                window.CleanEdgeCacheOnly();
-                window.CleanFirefoxCacheOnly();
-            });
-
-            // Test 11: Prefetch, AmCache & ShimCache (Cat 13, 14, 15)
-            AssertTest("11. Prefetch, AmCache & ShimCache", delegate() {
-                window.DeletePrefetchFilesOnly();
-                window.DisablePrefetcherOnly();
-                window.StopSysMainOnly();
-                window.ClearAmCacheOnly();
-                window.ClearRecentFileCacheOnly();
-                window.ClearShimCacheOnly();
-            });
-
-            // Test 12: UserAssist, BAM/DAM & SRUM (Cat 16, 17, 18)
-            AssertTest("12. UserAssist, BAM/DAM & SRUM", delegate() {
-                window.ClearUserAssistOnly();
-                window.DisableUserAssistTrackingOnly();
-                window.ClearBamOnly();
-                window.ClearDamOnly();
-                window.ClearSrumOnly();
-            });
-
-            // Test 13: TypedPaths, RecentDocs & Notifications (Cat 19, 20, 21)
-            AssertTest("13. TypedPaths/URLs/MUICache, RecentDocs & WPN DB", delegate() {
-                window.ClearTypedPathsOnly();
-                window.ClearTypedUrlsOnly();
-                window.ClearMuiCacheOnly();
-                window.ClearRecentDocsOnly();
-                window.DeleteLnkFilesOnly();
-                window.ClearWpnDatabaseOnly();
-            });
-
-            // Test 14: RDP Artifacts & WiFi Profiles (Cat 22 & 23)
-            AssertTest("14. RDP Bitmap Cache & WiFi Profiles", delegate() {
-                window.ClearRdpCacheOnly();
-                window.ClearRdpMruOnly();
-                window.DeleteRdpFilesOnly();
-                window.DisableWifiSenseOnly();
-            });
-
-            // Test 15: Defender History & Search/Cortana (Cat 24 & 25)
-            AssertTest("15. Defender History & Cortana/Search Tracking", delegate() {
-                window.ClearDefenderHistoryOnly();
-                window.ClearDefenderQuarantineOnly();
-                window.DisableCortanaOnly();
-                window.ClearSearchHistoryOnly();
-            });
-
-            // Test 16: OneDrive Logs & Windows Recall AI / Copilot (Cat 26 & 27)
-            AssertTest("16. OneDrive Logs & Windows 11 Recall AI / Copilot Kill", delegate() {
-                window.ClearOneDriveLogsOnly();
-                window.ClearOneDriveTelemetryOnly();
-                window.DisableRecallOnly();
-                window.DisableCopilotOnly();
-                window.DeleteRecallSnapshotsOnly();
-            });
-
-            // Test 17: Scheduled Tasks & Forensic Hardening (Cat 28 & 29)
-            AssertTest("17. Telemetry Scheduled Tasks & Forensic Hardening (Pagefile/Hibernation)", delegate() {
-                window.DisableCompatAppraiserOnly();
-                window.DisableProgramDataUpdaterOnly();
-                window.DisableCeipTasksOnly();
-                window.EnablePagefileClearOnly();
-                window.DisableLastAccessOnly();
-            });
-
-            // Test 18: Icon/Font Cache, PS Logging & Sensor Access (Cat 30, 31, 32)
-            AssertTest("18. Icon/Font Cache, PS Logging & CapabilityAccessManager Sensors", delegate() {
-                window.ClearIconCacheOnly();
-                window.ClearFontCacheOnly();
-                window.DisablePsTranscriptOnly();
-                window.DisablePsModuleLoggingOnly();
-                window.DisablePsScriptBlockOnly();
-                window.ResetLocationAccessOnly();
-                window.ResetCameraAccessOnly();
-                window.ResetMicAccessOnly();
-                window.DenyAllSensorsOnly();
-            });
-
-            // Test 19: Full 32-Vector Master Protocol Sequential Execution
-            AssertTest("19. Full 32-Vector Master Protocol Sequential Execution", delegate() {
-                window.MasterStealthProtocol();
-            });
+            // cleanup
+            try
+            {
+                Kernel.DryRun = false;
+                Kernel.Backup = null;
+                Kernel.RegDeleteTree(sandboxKey);
+                if (Directory.Exists(sandboxDir)) Directory.Delete(sandboxDir, true);
+            }
+            catch { }
 
             Console.WriteLine();
             Console.ForegroundColor = ConsoleColor.Cyan;
@@ -255,15 +321,30 @@ namespace STEALTH
             if (failed == 0)
             {
                 Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine(" ALL " + passed + "/" + passed + " DEEP 32-VECTOR TEST CASES PASSED WITH 100% ACCURACY!");
+                Console.WriteLine(" ALL " + passed + "/" + passed + " SANDBOX-SAFE TESTS PASSED — 46-VECTOR ENGINE VERIFIED");
             }
             else
             {
                 Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine(" TEST RUN COMPLETED WITH FAILURES: " + passed + " Passed, " + failed + " Failed.");
+                Console.WriteLine(" TEST RUN COMPLETED WITH FAILURES: " + passed + " passed, " + failed + " failed.");
+                foreach (string d in failDetails) Console.WriteLine("   - " + d);
             }
             Console.ResetColor();
             Console.WriteLine("===================================================================");
+        }
+
+        private static IEnumerable<FrameworkElement> FindAll(System.Windows.DependencyObject parent, Func<string, bool> namePredicate)
+        {
+            foreach (object child in LogicalTreeHelper.GetChildren(parent))
+            {
+                var fe = child as FrameworkElement;
+                if (fe != null && namePredicate(fe.Name)) yield return fe;
+                var dep = child as System.Windows.DependencyObject;
+                if (dep != null)
+                {
+                    foreach (var inner in FindAll(dep, namePredicate)) yield return inner;
+                }
+            }
         }
     }
 }
