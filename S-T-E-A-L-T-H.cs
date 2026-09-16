@@ -1652,10 +1652,16 @@ namespace STEALTH
             c.InfoPaths = "\\Microsoft\\Windows\\Application Experience\\{Microsoft Compatibility Appraiser, ProgramDataUpdater}\n\\Microsoft\\Windows\\Customer Experience Improvement Program\\{Consolidator, KernelCeipTask, UsbCeipTask}\n\\Microsoft\\Windows\\Application Experience\\StartupAppTask";
             c.Actions.Add(A("28.1", "Disable Compatibility Appraiser", RiskLevel.Safe, delegate(bool dry)
             {
+                if (Kernel.DryRun) { Kernel.Log("[DRY] schtasks disable Compat Appraiser"); return OpResult.OK("preview"); }
+                ProcResult q = ProcRunner.Run("schtasks.exe", "/Query /TN \"\\Microsoft\\Windows\\Application Experience\\Microsoft Compatibility Appraiser\"", 15000);
+                if (q.Code != 0) return OpResult.SKIP("task not present on this system (removed/renamed by Windows build)");
                 return Kernel.Tool("schtasks.exe", "/Change /TN \"\\Microsoft\\Windows\\Application Experience\\Microsoft Compatibility Appraiser\" /Disable", "Compat Appraiser", 20000);
             }, "Application Experience tasks"));
             c.Actions.Add(A("28.2", "Disable ProgramDataUpdater", RiskLevel.Safe, delegate(bool dry)
             {
+                if (Kernel.DryRun) { Kernel.Log("[DRY] schtasks disable ProgramDataUpdater"); return OpResult.OK("preview"); }
+                ProcResult q = ProcRunner.Run("schtasks.exe", "/Query /TN \"\\Microsoft\\Windows\\Application Experience\\ProgramDataUpdater\"", 15000);
+                if (q.Code != 0) return OpResult.SKIP("task not present on this system (removed/renamed by Windows build)");
                 return Kernel.Tool("schtasks.exe", "/Change /TN \"\\Microsoft\\Windows\\Application Experience\\ProgramDataUpdater\" /Disable", "ProgramDataUpdater", 20000);
             }, "ProgramDataUpdater"));
             c.Actions.Add(A("28.3", "Disable CEIP tasks", RiskLevel.Safe, delegate(bool dry)
@@ -1665,13 +1671,16 @@ namespace STEALTH
                     "\\Microsoft\\Windows\\Customer Experience Improvement Program\\Consolidator",
                     "\\Microsoft\\Windows\\Customer Experience Improvement Program\\KernelCeipTask",
                     "\\Microsoft\\Windows\\Customer Experience Improvement Program\\UsbCeip" };
-                int ok = 0;
+                int ok = 0, absent = 0;
                 foreach (string t in tasks)
                 {
+                    ProcResult q = ProcRunner.Run("schtasks.exe", "/Query /TN \"" + t + "\"", 15000);
+                    if (q.Code != 0) { absent++; continue; }
                     ProcResult r = ProcRunner.Run("schtasks.exe", "/Change /TN \"" + t + "\" /Disable", 15000);
                     if (r.Code == 0) ok++;
                 }
-                return OpResult.OK(ok + "/3 CEIP tasks disabled");
+                if (absent == tasks.Length) return OpResult.SKIP("CEIP tasks not present on this system (removed/renamed by Windows build)");
+                return OpResult.OK(ok + "/" + (tasks.Length - absent) + " CEIP tasks disabled (" + absent + " absent)");
             }, "CEIP Consolidator/KernelCeip/UsbCeip"));
             cats.Add(c);
 
@@ -2457,6 +2466,7 @@ namespace STEALTH
         private Button btnDry, btnBackup, btnQuarantine, btnMaster;
         private List<KeyValuePair<string, FrameworkElement[]>> cardIndex = new List<KeyValuePair<string, FrameworkElement[]>>();
         private DispatcherTimer hudTimer;
+        private List<Category> allCats;
         private bool busy;
         private int okCount, failCount, skipCount;
 
@@ -2473,6 +2483,7 @@ namespace STEALTH
             TextOptions.SetTextFormattingMode(this, TextFormattingMode.Display);
             this.SnapsToDevicePixels = true;
             this.UseLayoutRounding = true;
+            allCats = ActionRegistry.Build();
             BuildUI();
             WireShell();
             StartHud();
@@ -2485,7 +2496,7 @@ namespace STEALTH
         private int CountActions()
         {
             int n = 0;
-            foreach (Category c in ActionRegistry.Build()) n += c.Actions.Count;
+            foreach (Category c in allCats) n += c.Actions.Count;
             return n;
         }
 
@@ -2547,7 +2558,7 @@ namespace STEALTH
 
         private void BuildUI()
         {
-            List<Category> cats = ActionRegistry.Build();
+            List<Category> cats = allCats;
             StringBuilder cards = new StringBuilder();
             foreach (Category c in cats) cards.Append(MakeCard(c));
 
@@ -3022,7 +3033,7 @@ namespace STEALTH
             txtShredPath = (TextBox)LogicalTreeHelper.FindLogicalNode(root, "TxtShredPath");
 
             // wire cards
-            List<Category> catsW = ActionRegistry.Build();
+            List<Category> catsW = allCats;
             foreach (Category c in catsW)
             {
                 Border card = (Border)LogicalTreeHelper.FindLogicalNode(root, "Card_" + c.Num);
@@ -3098,7 +3109,29 @@ namespace STEALTH
                 btnQuarantine.Content = Kernel.QuarantineOn ? "\uD83D\uDCE6 QUARANTINE: ON" : "\uD83D\uDCE6 QUARANTINE: OFF";
                 AppendLog("[MODE] file quarantine " + (Kernel.QuarantineOn ? "ENABLED (files moved to quarantine, restorable)" : "DISABLED (files hard-deleted, sizes recorded in manifest)"));
             };
-            btnMaster.Click += delegate { RunAsync(MasterProtocol); };
+            btnMaster.Click += delegate
+            {
+                int idx = cmbProfile.SelectedIndex;
+                string prof = idx == 0 ? "Safe" : (idx == 2 ? "Paranoid" : "Balanced");
+                if (prof == "Paranoid" && !Kernel.DryRun)
+                {
+                    int desCount = 0;
+                    StringBuilder desList = new StringBuilder();
+                    foreach (Category c in allCats)
+                        foreach (StealthAction a in c.Actions)
+                            if (a.Destructive)
+                            {
+                                desCount++;
+                                if (desList.Length < 700) desList.Append("  \u2622 ").Append(c.Num).Append(".").Append(a.Num).Append(" ").Append(a.Title).Append("\n");
+                            }
+                    MessageBoxResult mbr = MessageBox.Show(this,
+                        "PARANOID profile will execute " + desCount + " DESTRUCTIVE actions:\n\n" + desList.ToString() +
+                        "\nBackups/quarantine still apply where possible, but several of these are IRREVERSIBLE (VSS shadows, browser history, WiFi passwords).\n\nContinue?",
+                        "S-T-E-A-L-T-H v8.0 — Paranoid Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                    if (mbr != MessageBoxResult.Yes) { AppendLog("[CANCEL] Paranoid master protocol cancelled by user."); return; }
+                }
+                RunAsync(MasterProtocol);
+            };
             btnAudit.Click += delegate { RunAsync(RunAudit); };
             btnPcName.Click += delegate
             {
@@ -3312,6 +3345,13 @@ namespace STEALTH
 
         private void RunAction(StealthAction a)
         {
+            if (a.Destructive && !Kernel.DryRun)
+            {
+                MessageBoxResult mbr = MessageBox.Show(this,
+                    "DESTRUCTIVE ACTION [" + a.Num + "]: " + a.Title + "\n\n" + a.Info + "\n\nContinue?",
+                    "S-T-E-A-L-T-H v8.0 — Destructive Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                if (mbr != MessageBoxResult.Yes) { AppendLog("[CANCEL] " + a.Num + " cancelled by user."); return; }
+            }
             RunAsync(delegate
             {
                 OpResult r = a.Run(Kernel.DryRun);
@@ -3381,7 +3421,7 @@ namespace STEALTH
             }
             else AppendLog("[DRY] preview mode — no changes will be made.");
 
-            List<Category> cats = ActionRegistry.Build();
+            List<Category> cats = allCats;
             int total = 0;
             foreach (Category cat in cats)
             {
