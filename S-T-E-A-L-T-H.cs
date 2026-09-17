@@ -2530,9 +2530,8 @@ namespace STEALTH
 
     public static class ThemeManager
     {
-        public static readonly string[] Modes = new string[] { "Dark", "Light", "System" };
+        public static readonly string[] Modes = new string[] { "Dark", "Light" };
         private static string mode = "Dark";
-        private static bool hooked;
         public static string Mode { get { return mode; } }
         public static string Resolved { get { return Resolve(); } }
         public static event Action Changed;
@@ -2549,7 +2548,16 @@ namespace STEALTH
                 if (File.Exists(SettingsPath()))
                 {
                     string m = File.ReadAllText(SettingsPath()).Trim();
-                    foreach (string k in Modes) if (k.Equals(m, StringComparison.OrdinalIgnoreCase)) mode = k;
+                    if (m.Equals("System", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // legacy saved value from when a System mode existed — resolve once to a concrete theme
+                        mode = SystemLight() ? "Light" : "Dark";
+                        try { Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath())); File.WriteAllText(SettingsPath(), mode); } catch { }
+                    }
+                    else
+                    {
+                        foreach (string k in Modes) if (k.Equals(m, StringComparison.OrdinalIgnoreCase)) mode = k;
+                    }
                 }
             }
             catch { }
@@ -2566,7 +2574,6 @@ namespace STEALTH
             }
             catch { }
             Apply();
-            HookSystemListener();
         }
 
         public static string NextMode()
@@ -2585,21 +2592,7 @@ namespace STEALTH
             catch { return false; }
         }
 
-        private static string Resolve() { return mode == "System" ? (SystemLight() ? "Light" : "Dark") : mode; }
-
-        private static void HookSystemListener()
-        {
-            if (hooked) return;
-            hooked = true;
-            try
-            {
-                Microsoft.Win32.SystemEvents.UserPreferenceChanged += delegate
-                {
-                    if (mode == "System") { Apply(); }
-                };
-            }
-            catch { }
-        }
+        private static string Resolve() { return mode; }
 
         private static readonly Dictionary<string, string> Dark = new Dictionary<string, string>();
         private static readonly Dictionary<string, string> Light = new Dictionary<string, string>();
@@ -2696,14 +2689,14 @@ namespace STEALTH
         private ProgressBar prgBar;
         private TextBlock txtHost, txtNet, txtTelem, txtRam;
         private TextBlock txtOk;
-        private Border infoModal, pcNameModal, restoreModal, scheduleModal, shredModal;
+        private Border infoModal, pcNameModal, restoreModal, scheduleModal, shredModal, menuModal;
         private TextBlock txtModalTitle, txtModalDesc, txtModalPaths;
         private TextBox txtNewPcName, txtShredPath, txtSchedTime;
         private TextBlock txtSchedStatus, txtRestoreInfo;
         private ListBox lstSessions;
         private ComboBox cmbProfile;
         private TextBox txtSearch;
-        private Button btnDry, btnBackup, btnQuarantine, btnMaster, btnTheme;
+        private Button btnDry, btnBackup, btnQuarantine, btnMaster, btnTheme, btnMenu;
         private List<KeyValuePair<string, FrameworkElement[]>> cardIndex = new List<KeyValuePair<string, FrameworkElement[]>>();
         private DispatcherTimer hudTimer;
         private List<Category> allCats;
@@ -3098,6 +3091,7 @@ namespace STEALTH
                     <TextBlock Text=""// 46-VECTOR ENGINE · DRY-RUN · BACKUP · QUARANTINE · AUDIT · SCHEDULER"" FontSize=""10.5"" Foreground=""{DynamicResource TextMuted}"" VerticalAlignment=""Center"" Margin=""10,0,0,0""/>
                 </StackPanel>
                 <StackPanel Grid.Column=""1"" Orientation=""Horizontal"">
+                    <Button x:Name=""BtnMenu"" Content=""≡"" Width=""32"" Height=""32"" Background=""Transparent"" Foreground=""{DynamicResource TextSecondary}"" FontSize=""16"" FontWeight=""Bold"" BorderThickness=""0"" Cursor=""Hand"" Margin=""0,0,10,0""/>
                     <Button x:Name=""BtnMin"" Content=""─"" Width=""32"" Height=""32"" Background=""Transparent"" Foreground=""{DynamicResource TextSecondary}"" FontWeight=""Bold"" BorderThickness=""0"" Cursor=""Hand"" Margin=""0,0,4,0""/>
                     <Button x:Name=""BtnMax"" Content=""🗖"" Width=""32"" Height=""32"" Background=""Transparent"" Foreground=""{DynamicResource TextSecondary}"" FontWeight=""Bold"" BorderThickness=""0"" Cursor=""Hand"" Margin=""0,0,4,0""/>
                     <Button x:Name=""BtnClose"" Content=""✕"" Width=""32"" Height=""32"" Background=""Transparent"" Foreground=""{DynamicResource CloseFg}"" FontWeight=""Bold"" BorderThickness=""0"" Cursor=""Hand""/>
@@ -3327,6 +3321,41 @@ namespace STEALTH
                     </StackPanel>
                 </Border>
             </Border>
+            <!-- HAMBURGER MENU OVERLAY -->
+            <Border x:Name=""MenuModal"" Background=""{DynamicResource ModalOverlay}"" Visibility=""Collapsed"" CornerRadius=""14"" Margin=""8"">
+                <Border Background=""{DynamicResource ModalPanelBg}"" BorderBrush=""{DynamicResource WinBorder}"" BorderThickness=""1.5"" CornerRadius=""12""
+                        Width=""470"" HorizontalAlignment=""Right"" VerticalAlignment=""Top"" Margin=""0,12,12,0"" Padding=""18"">
+                    <StackPanel>
+                        <Grid Margin=""0,0,0,12"">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width=""*""/><ColumnDefinition Width=""Auto""/></Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column=""0"" Text=""≡ MENU"" FontSize=""15"" FontWeight=""ExtraBold"" Foreground=""{DynamicResource WinBorder}""/>
+                            <Button x:Name=""BtnCloseMenu"" Grid.Column=""1"" Content=""✕"" Width=""28"" Height=""28"" Background=""Transparent"" Foreground=""{DynamicResource CloseFg}"" FontWeight=""Bold"" BorderThickness=""0"" Cursor=""Hand""/>
+                        </Grid>
+                        <TextBlock Text=""SETTINGS"" FontSize=""10"" FontWeight=""Bold"" Foreground=""{DynamicResource TextMuted}"" Margin=""0,0,0,6""/>
+                        <TextBlock Text=""Theme"" FontSize=""11"" Foreground=""{DynamicResource TextSecondary}"" Margin=""0,0,0,4""/>
+                        <StackPanel Orientation=""Horizontal"" Margin=""0,0,0,10"">
+                            <Button x:Name=""BtnThemeDark"" Style=""{StaticResource ToolBtn}"" Content=""🌙 Dark""/>
+                            <Button x:Name=""BtnThemeLight"" Style=""{StaticResource ToolBtn}"" Content=""☀ Light""/>
+                        </StackPanel>
+                        <TextBlock Text=""Execution safety toggles"" FontSize=""11"" Foreground=""{DynamicResource TextSecondary}"" Margin=""0,0,0,4""/>
+                        <StackPanel Orientation=""Horizontal"" Margin=""0,0,0,12"">
+                            <Button x:Name=""BtnMenuDry"" Style=""{StaticResource ToolBtn}"" Content=""Dry-Run""/>
+                            <Button x:Name=""BtnMenuBackup"" Style=""{StaticResource ToolBtn}"" Content=""Backup""/>
+                            <Button x:Name=""BtnMenuQuar"" Style=""{StaticResource ToolBtn}"" Content=""Quarantine""/>
+                        </StackPanel>
+                        <TextBlock Text=""ACTIONS"" FontSize=""10"" FontWeight=""Bold"" Foreground=""{DynamicResource TextMuted}"" Margin=""0,0,0,6""/>
+                        <StackPanel Orientation=""Horizontal"" Margin=""0,0,0,12"">
+                            <Button x:Name=""BtnMenuBackups"" Style=""{StaticResource ToolBtn}"" Content=""📂 Open Backups Folder""/>
+                            <Button x:Name=""BtnMenuAudit"" Style=""{StaticResource ToolBtn}"" Content=""📊 Run Privacy Audit""/>
+                            <Button x:Name=""BtnMenuCliHelp"" Style=""{StaticResource ToolBtn}"" Content=""💻 CLI Commands""/>
+                        </StackPanel>
+                        <TextBlock Text=""INFO"" FontSize=""10"" FontWeight=""Bold"" Foreground=""{DynamicResource TextMuted}"" Margin=""0,0,0,6""/>
+                        <StackPanel Orientation=""Horizontal"">
+                            <Button x:Name=""BtnMenuAbout"" Style=""{StaticResource ToolBtn}"" Content=""ℹ About S-T-E-A-L-T-H""/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Border>
         </Grid>
     </Border>
 </Grid>";
@@ -3357,6 +3386,8 @@ namespace STEALTH
             btnBackup = (Button)LogicalTreeHelper.FindLogicalNode(root, "BtnBackup");
             btnQuarantine = (Button)LogicalTreeHelper.FindLogicalNode(root, "BtnQuarantine");
             btnTheme = (Button)LogicalTreeHelper.FindLogicalNode(root, "BtnTheme");
+            btnMenu = (Button)LogicalTreeHelper.FindLogicalNode(root, "BtnMenu");
+            menuModal = (Border)LogicalTreeHelper.FindLogicalNode(root, "MenuModal");
             btnMaster = (Button)LogicalTreeHelper.FindLogicalNode(root, "BtnMasterRun");
 
             infoModal = (Border)LogicalTreeHelper.FindLogicalNode(root, "InfoModal");
@@ -3432,25 +3463,9 @@ namespace STEALTH
                 if (e.ClickCount == 2) ToggleMaximize(); else try { this.DragMove(); } catch { }
             };
 
-            btnDry.Click += delegate
-            {
-                Kernel.DryRun = !Kernel.DryRun;
-                btnDry.Content = Kernel.DryRun ? "\u25CF DRY-RUN: ON" : "\u25CB DRY-RUN: OFF";
-                btnDry.Foreground = (Brush)this.FindResource(Kernel.DryRun ? "WarnFg" : "ToolBtnFg");
-                AppendLog(Kernel.DryRun ? "[MODE] DRY-RUN enabled — nothing will be modified, every planned op is previewed." : "[MODE] DRY-RUN disabled — live execution.");
-            };
-            btnBackup.Click += delegate
-            {
-                Kernel.BackupOn = !Kernel.BackupOn;
-                btnBackup.Content = Kernel.BackupOn ? "\uD83D\uDCBE BACKUP: ON" : "\uD83D\uDCBE BACKUP: OFF";
-                AppendLog("[MODE] registry backup " + (Kernel.BackupOn ? "ENABLED (reg export before every key mutation)" : "DISABLED (not recommended)"));
-            };
-            btnQuarantine.Click += delegate
-            {
-                Kernel.QuarantineOn = !Kernel.QuarantineOn;
-                btnQuarantine.Content = Kernel.QuarantineOn ? "\uD83D\uDCE6 QUARANTINE: ON" : "\uD83D\uDCE6 QUARANTINE: OFF";
-                AppendLog("[MODE] file quarantine " + (Kernel.QuarantineOn ? "ENABLED (files moved to quarantine, restorable)" : "DISABLED (files hard-deleted, sizes recorded in manifest)"));
-            };
+            btnDry.Click += delegate { ToggleDryRun(); };
+            btnBackup.Click += delegate { ToggleBackup(); };
+            btnQuarantine.Click += delegate { ToggleQuarantine(); };
             btnTheme.Click += delegate
             {
                 ThemeManager.SetMode(ThemeManager.NextMode());
@@ -3461,6 +3476,56 @@ namespace STEALTH
                 try { Dispatcher.Invoke((Action)(delegate { UpdateThemeButton(); })); } catch { }
             };
             UpdateThemeButton();
+
+            // hamburger menu
+            var btnCloseMenu = (Button)LogicalTreeHelper.FindLogicalNode(root, "BtnCloseMenu");
+            var btnThemeDark = (Button)LogicalTreeHelper.FindLogicalNode(root, "BtnThemeDark");
+            var btnThemeLight = (Button)LogicalTreeHelper.FindLogicalNode(root, "BtnThemeLight");
+            var btnMenuDry = (Button)LogicalTreeHelper.FindLogicalNode(root, "BtnMenuDry");
+            var btnMenuBackup = (Button)LogicalTreeHelper.FindLogicalNode(root, "BtnMenuBackup");
+            var btnMenuQuar = (Button)LogicalTreeHelper.FindLogicalNode(root, "BtnMenuQuar");
+            var btnMenuBackups = (Button)LogicalTreeHelper.FindLogicalNode(root, "BtnMenuBackups");
+            var btnMenuAudit = (Button)LogicalTreeHelper.FindLogicalNode(root, "BtnMenuAudit");
+            var btnMenuCliHelp = (Button)LogicalTreeHelper.FindLogicalNode(root, "BtnMenuCliHelp");
+            var btnMenuAbout = (Button)LogicalTreeHelper.FindLogicalNode(root, "BtnMenuAbout");
+            btnMenu.Click += delegate { RefreshMenuLabels(); menuModal.Visibility = Visibility.Visible; };
+            btnCloseMenu.Click += delegate { menuModal.Visibility = Visibility.Collapsed; };
+            menuModal.MouseLeftButtonDown += delegate(object s, System.Windows.Input.MouseButtonEventArgs e)
+            {
+                if (e.OriginalSource == menuModal) menuModal.Visibility = Visibility.Collapsed; // backdrop click closes
+            };
+            btnThemeDark.Click += delegate { ThemeManager.SetMode("Dark"); RefreshMenuLabels(); AppendLog("[THEME] Dark applied."); };
+            btnThemeLight.Click += delegate { ThemeManager.SetMode("Light"); RefreshMenuLabels(); AppendLog("[THEME] Light applied."); };
+            btnMenuDry.Click += delegate { ToggleDryRun(); };
+            btnMenuBackup.Click += delegate { ToggleBackup(); };
+            btnMenuQuar.Click += delegate { ToggleQuarantine(); };
+            btnMenuBackups.Click += delegate
+            {
+                try { Process.Start("explorer.exe", BackupManager.BaseDir()); }
+                catch (Exception ex) { AppendLog("[MENU] open backups failed: " + ex.Message); }
+            };
+            btnMenuAudit.Click += delegate { menuModal.Visibility = Visibility.Collapsed; RunAsync(RunAudit); };
+            btnMenuCliHelp.Click += delegate
+            {
+                menuModal.Visibility = Visibility.Collapsed;
+                AppendLog("[CLI] S-T-E-A-L-T-H.exe /sweep /profile:Safe|Balanced|Paranoid [/dry]");
+                AppendLog("[CLI] S-T-E-A-L-T-H.exe /audit /out:\"C:\\report.html\"");
+                AppendLog("[CLI] S-T-E-A-L-T-H.exe /restore /dir:\"<session folder>\"");
+            };
+            btnMenuAbout.Click += delegate
+            {
+                MessageBox.Show(this,
+                    "S - T - E - A - L - T - H  v8.0 ABSOLUTE\n\n" +
+                    "46-Vector Absolute Forensic Annihilation Suite\n" +
+                    "161 granular actions \u00B7 Dry-Run \u00B7 Backup/Restore \u00B7 Quarantine\n" +
+                    "3-Pass Shredder \u00B7 Privacy Audit \u00B7 Scheduler \u00B7 Headless CLI\n" +
+                    "Dark/Light themes \u00B7 Native edge resize \u00B7 Rotating ident HUD\n\n" +
+                    "Build: " + DateTime.Now.ToString("yyyy-MM-dd") + "\n" +
+                    "Host: " + Environment.MachineName + "   User: " + Environment.UserName + "\n" +
+                    "Elevated: " + (Kernel.IsAdmin() ? "YES" : "NO") + "\n\n" +
+                    "For authorized privacy enhancement and defensive auditing\non systems you own. Use responsibly.",
+                    "About S-T-E-A-L-T-H", MessageBoxButton.OK, MessageBoxImage.Information);
+            };
             btnMaster.Click += delegate
             {
                 int idx = cmbProfile.SelectedIndex;
@@ -3628,31 +3693,133 @@ namespace STEALTH
             ResetCounters();
         }
 
+        // ------------------------------------------------------------------ native resize
+        // Borderless windows have no resize frame, so answer WM_NCHITTEST with edge/corner
+        // hit codes: dragging any edge or corner then resizes the window natively (with
+        // Windows' own drag loop), exactly like a normal chrome window.
+
+        protected override void OnSourceInitialized(EventArgs e)
+        {
+            base.OnSourceInitialized(e);
+            try
+            {
+                System.Windows.Interop.HwndSource src = (System.Windows.Interop.HwndSource)PresentationSource.FromVisual(this);
+                if (src != null) src.AddHook(WndProc);
+            }
+            catch { }
+        }
+
+        private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            const int WM_NCHITTEST = 0x0084;
+            const int HTCLIENT = 1;
+            const int HTLEFT = 10, HTRIGHT = 11, HTTOP = 12, HTTOPLEFT = 13, HTTOPRIGHT = 14;
+            const int HTBOTTOM = 15, HTBOTTOMLEFT = 16, HTBOTTOMRIGHT = 17;
+            if (msg == WM_NCHITTEST && !pseudoMaximized)
+            {
+                try
+                {
+                    // the probe point arrives in lParam (signed screen px, physical)
+                    int lraw = lParam.ToInt32();
+                    int px = (short)(lraw & 0xFFFF);
+                    int py = (short)((lraw >> 16) & 0xFFFF);
+                    double sx = 1.0, sy = 1.0;
+                    System.Windows.Interop.HwndSource src = (System.Windows.Interop.HwndSource)PresentationSource.FromVisual(this);
+                    if (src != null && src.CompositionTarget != null)
+                    {
+                        sx = src.CompositionTarget.TransformToDevice.M11;
+                        sy = src.CompositionTarget.TransformToDevice.M22;
+                    }
+                    if (sx <= 0) sx = 1.0;
+                    if (sy <= 0) sy = 1.0;
+                    double lx = px / sx - this.Left;      // probe in window-local DIPs
+                    double ly = py / sy - this.Top;
+                    double w = this.ActualWidth, h = this.ActualHeight;
+                    double z = 8;                          // resizable edge zone (DIPs)
+                    bool L = lx <= z, R = lx >= w - z, T = ly <= z, B = ly >= h - z;
+                    int ht = HTCLIENT;
+                    if (T && L) ht = HTTOPLEFT;
+                    else if (T && R) ht = HTTOPRIGHT;
+                    else if (B && L) ht = HTBOTTOMLEFT;
+                    else if (B && R) ht = HTBOTTOMRIGHT;
+                    else if (L) ht = HTLEFT;
+                    else if (R) ht = HTRIGHT;
+                    else if (T) ht = HTTOP;
+                    else if (B) ht = HTBOTTOM;
+                    if (ht != HTCLIENT) { handled = true; return new IntPtr(ht); }
+                }
+                catch { }
+            }
+            return IntPtr.Zero;
+        }
+
         private void UpdateThemeButton()
         {
             if (btnTheme == null) return;
-            btnTheme.Content = ThemeManager.Mode == "System"
-                ? "◐ THEME: SYSTEM (" + ThemeManager.Resolved.ToLower() + ")"
-                : "◐ THEME: " + ThemeManager.Mode.ToUpper();
+            btnTheme.Content = "◐ THEME: " + ThemeManager.Mode.ToUpper();
         }
 
-        private void ToggleMaximize()
+        private void ToggleDryRun()
+        {
+            Kernel.DryRun = !Kernel.DryRun;
+            RefreshMenuLabels();
+            AppendLog(Kernel.DryRun ? "[MODE] DRY-RUN enabled — nothing will be modified, every planned op is previewed." : "[MODE] DRY-RUN disabled — live execution.");
+        }
+
+        private void ToggleBackup()
+        {
+            Kernel.BackupOn = !Kernel.BackupOn;
+            RefreshMenuLabels();
+            AppendLog("[MODE] registry backup " + (Kernel.BackupOn ? "ENABLED (reg export before every key mutation)" : "DISABLED (not recommended)"));
+        }
+
+        private void ToggleQuarantine()
+        {
+            Kernel.QuarantineOn = !Kernel.QuarantineOn;
+            RefreshMenuLabels();
+            AppendLog("[MODE] file quarantine " + (Kernel.QuarantineOn ? "ENABLED (files moved to quarantine, restorable)" : "DISABLED (files hard-deleted, sizes recorded in manifest)"));
+        }
+
+        private void RefreshMenuLabels()
+        {
+            btnDry.Content = Kernel.DryRun ? "\u25CF DRY-RUN: ON" : "\u25CB DRY-RUN: OFF";
+            btnDry.Foreground = (Brush)this.FindResource(Kernel.DryRun ? "WarnFg" : "ToolBtnFg");
+            btnBackup.Content = "\uD83D\uDCBE BACKUP: " + (Kernel.BackupOn ? "ON" : "OFF");
+            btnQuarantine.Content = "\uD83D\uDCE6 QUARANTINE: " + (Kernel.QuarantineOn ? "ON" : "OFF");
+            var root = this.Content as UIElement;
+            var themeDark = (Button)LogicalTreeHelper.FindLogicalNode(root, "BtnThemeDark");
+            var themeLight = (Button)LogicalTreeHelper.FindLogicalNode(root, "BtnThemeLight");
+            var mDry = (Button)LogicalTreeHelper.FindLogicalNode(root, "BtnMenuDry");
+            var mBak = (Button)LogicalTreeHelper.FindLogicalNode(root, "BtnMenuBackup");
+            var mQuar = (Button)LogicalTreeHelper.FindLogicalNode(root, "BtnMenuQuar");
+            themeDark.Content = (ThemeManager.Mode == "Dark" ? "\u2713 " : "") + "\uD83C\uDF19 Dark";
+            themeLight.Content = (ThemeManager.Mode == "Light" ? "\u2713 " : "") + "\u2600 Light";
+            mDry.Content = "Dry-Run: " + (Kernel.DryRun ? "ON" : "OFF");
+            mBak.Content = "Backup: " + (Kernel.BackupOn ? "ON" : "OFF");
+            mQuar.Content = "Quarantine: " + (Kernel.QuarantineOn ? "ON" : "OFF");
+        }
+
+        public void ToggleMaximize()
         {
             // borderless windows have no chrome-aware maximize, so fake it against the work
             // area (a real WindowState.Maximized would cover the taskbar)
+            Grid rootGrid = this.Content as Grid;
+            Border outer = rootGrid == null ? null : rootGrid.Children[0] as Border;
             if (pseudoMaximized)
             {
                 pseudoMaximized = false;
                 this.Left = restoreRect.Left; this.Top = restoreRect.Top;
                 this.Width = restoreRect.Width; this.Height = restoreRect.Height;
+                if (outer != null) { outer.Margin = new Thickness(8); outer.CornerRadius = new CornerRadius(14); }
             }
             else
             {
                 restoreRect = new Rect(this.Left, this.Top, this.Width, this.Height);
                 pseudoMaximized = true;
                 System.Windows.Rect wa = SystemParameters.WorkArea;
-                this.Left = wa.Left; this.Top = wa.Top;
-                this.Width = wa.Width; this.Height = wa.Height;
+                this.Left = wa.Left - 2; this.Top = wa.Top - 2;
+                this.Width = wa.Width + 4; this.Height = wa.Height + 4;
+                if (outer != null) { outer.Margin = new Thickness(0); outer.CornerRadius = new CornerRadius(0); }
             }
         }
 

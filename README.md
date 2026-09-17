@@ -87,7 +87,14 @@ PowerShell logging killswitch (with security-tradeoff note) · sensor permission
 
 **Search box** filters the 46 cards live by number, tag, title or action name.
 
-**Themes (◐ THEME button):** cycles **Dark → Light → System**. System follows your Windows personalization live (switching Windows theme re-skins the app instantly). Choice persists to `%LOCALAPPDATA%\STEALTH	heme.txt` and is restored on next launch. Every surface — cards, HUD, modals, ComboBox dropdowns, log stream — is themed; the app is also DPI-aware and always opens fully on-screen (fit-to-work-area on scaled displays).
+**Themes (◐ THEME button / ≡ menu):** cycles **Dark ↔ Light** (System mode removed by design). Choice persists to `%LOCALAPPDATA%\STEALTH	heme.txt` and is restored on next launch; a legacy saved `System` value auto-migrates to a concrete theme on first run.
+
+**≡ Hamburger menu (titlebar):** quick access panel with
+- **Settings** — theme Dark/Light (✓ marks active), Dry-Run / Backup / Quarantine toggles (live state, synced with toolbar)
+- **Actions** — Open Backups Folder, Run Privacy Audit, show CLI Commands
+- **Info** — About dialog (version, capabilities, host/user, elevation state)
+
+**Window behavior:** DPI-aware, always opens fully on-screen; **edge/corner drag-resize works like any normal app** (WM_NCHITTEST zones on all 8 directions); maximize is true edge-to-edge (no border gaps, work-area sized, taskbar respected); double-click titlebar or □ toggles maximize. Every surface — cards, HUD, modals, ComboBox dropdowns, log stream — is themed; the app is also DPI-aware and always opens fully on-screen (fit-to-work-area on scaled displays).
 
 **Rotating MACHINE IDENT:** the HUD's identity tile cycles automatically through every common identity notation every few seconds — `HOST (user)` (Windows), `user@HOST` (SSH/Linux), `HOST\user` (whoami/logon), `DOMAIN\user`, `user@host` lowercase (bash), `user@IPv4` (network), `user@HOST:~$` (terminal prompt), `HOST/user`, `user • HOST`, `USER@HOST`, `host.local (user)` (mDNS), `[user] HOST` (syslog), `HOST:user`, `user@domain` (UPN-ish) — deduplicated per machine (workgroup machines collapse domain-identical forms).
 

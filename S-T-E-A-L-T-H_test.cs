@@ -306,20 +306,20 @@ namespace STEALTH
                 }
             });
 
-            // Test 16: theme manager applies + persists Dark/Light/System
-            AssertTest("16. ThemeManager: Dark/Light/System apply + persistence", delegate()
+            // Test 16: theme manager applies + persists Dark/Light (System mode removed)
+            AssertTest("16. ThemeManager: Dark/Light apply + persistence + legacy System migration", delegate()
             {
                 ThemeManager.Load();
                 string original = ThemeManager.Mode;
+                if (original != "Dark" && original != "Light") throw new Exception("mode not concrete after Load: " + original);
                 ThemeManager.SetMode("Light");
                 System.Windows.Media.SolidColorBrush wl = Application.Current.Resources["WinBg"] as System.Windows.Media.SolidColorBrush;
                 if (wl == null || wl.Color.ToString() != "#FFEFF4FB") throw new Exception("light WinBg wrong: " + (wl == null ? "null" : wl.Color.ToString()));
                 ThemeManager.SetMode("Dark");
                 System.Windows.Media.SolidColorBrush wd = Application.Current.Resources["WinBg"] as System.Windows.Media.SolidColorBrush;
                 if (wd == null || wd.Color.ToString() != "#FF040711") throw new Exception("dark WinBg wrong: " + (wd == null ? "null" : wd.Color.ToString()));
-                ThemeManager.SetMode("System");
-                string resolved = ThemeManager.Resolved;
-                if (resolved != "Dark" && resolved != "Light") throw new Exception("system resolve invalid: " + resolved);
+                string nxt = ThemeManager.NextMode();
+                if (nxt != "Light") throw new Exception("cycle broken, got: " + nxt);
                 ThemeManager.SetMode(original); // restore user's saved mode
                 if (ThemeManager.Mode != original) throw new Exception("mode persistence broken");
             });
@@ -337,6 +337,27 @@ namespace STEALTH
                 string a2 = IdentFormats.Next();
                 if (a1 == a2) throw new Exception("rotation not advancing");
                 Console.Write("(" + fmts.Count + " formats) ");
+            });
+
+            // Test 18: borderless maximize spans the work area with zero gaps (margin/radius swap)
+            AssertTest("18. Maximize: pseudo-maximize spans work area, margin 0, no gaps", delegate()
+            {
+                System.Windows.Rect wa = SystemParameters.WorkArea;
+                window.ToggleMaximize();
+                try
+                {
+                    if (Math.Abs(window.Width - (wa.Width + 4)) > 2) throw new Exception("max width wrong: " + window.Width + " vs " + (wa.Width + 4));
+                    if (Math.Abs(window.Height - (wa.Height + 4)) > 2) throw new Exception("max height wrong: " + window.Height + " vs " + (wa.Height + 4));
+                    System.Windows.Controls.Grid rg = window.Content as System.Windows.Controls.Grid;
+                    System.Windows.Controls.Border ob = rg == null ? null : rg.Children[0] as System.Windows.Controls.Border;
+                    if (ob == null) throw new Exception("root border missing");
+                    if (ob.Margin.Left != 0 || ob.Margin.Top != 0 || ob.Margin.Right != 0 || ob.Margin.Bottom != 0) throw new Exception("gap: margin not 0 when maximized (" + ob.Margin + ")");
+                    if (ob.CornerRadius.TopLeft != 0) throw new Exception("gap: corner radius not 0 when maximized");
+                    window.ToggleMaximize();
+                    if (ob.Margin.Left != 8) throw new Exception("restore: margin not 8 (" + ob.Margin + ")");
+                    if (ob.CornerRadius.TopLeft != 14) throw new Exception("restore: radius not 14");
+                }
+                finally { if (window.Width > wa.Width) window.ToggleMaximize(); }
             });
 
             // cleanup
