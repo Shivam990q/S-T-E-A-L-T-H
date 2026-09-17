@@ -4,3 +4,6 @@ Thumbs.db
 *.tmp
 *.bak
 *.prespine
+*.edit_*.py
+.fix*.py
+*.tmp
