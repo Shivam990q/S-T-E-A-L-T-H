@@ -89,6 +89,8 @@ PowerShell logging killswitch (with security-tradeoff note) · sensor permission
 
 **Themes (◐ THEME button):** cycles **Dark → Light → System**. System follows your Windows personalization live (switching Windows theme re-skins the app instantly). Choice persists to `%LOCALAPPDATA%\STEALTH	heme.txt` and is restored on next launch. Every surface — cards, HUD, modals, ComboBox dropdowns, log stream — is themed; the app is also DPI-aware and always opens fully on-screen (fit-to-work-area on scaled displays).
 
+**Rotating MACHINE IDENT:** the HUD's identity tile cycles automatically through every common identity notation every few seconds — `HOST (user)` (Windows), `user@HOST` (SSH/Linux), `HOST\user` (whoami/logon), `DOMAIN\user`, `user@host` lowercase (bash), `user@IPv4` (network), `user@HOST:~$` (terminal prompt), `HOST/user`, `user • HOST`, `USER@HOST`, `host.local (user)` (mDNS), `[user] HOST` (syslog), `HOST:user`, `user@domain` (UPN-ish) — deduplicated per machine (workgroup machines collapse domain-identical forms).
+
 ## 💻 Headless CLI
 
 ```powershell
