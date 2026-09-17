@@ -34,7 +34,7 @@ v7.0 had 34 vectors whose "[OK]" messages were printed even when operations sile
 | Version | **v8.0 ABSOLUTE** |
 | Vectors | **46 categories** (0, 00, 1–32 original + 33–44 new) |
 | Granular actions | **161** micro-action buttons |
-| Interface | WPF dark GUI: live HUD, result counters, search filter, 5 modals |
+| Interface | WPF GUI: **Dark / Light / System themes**, live HUD, result counters, search filter, 5 modals, DPI-aware fit-to-screen |
 | Engine | Central Kernel: registry / files / services / processes with Dry-Run + backup hooks |
 | Backup store | `C:\ProgramData\STEALTH\backups\session-YYYYMMDD-HHMMSS\` |
 | Profiles | 🟢 Safe · 🟡 Balanced · 🔴 Paranoid (destructive) |
@@ -86,6 +86,8 @@ PowerShell logging killswitch (with security-tradeoff note) · sensor permission
 - **👑 PC NAME SPOOF** — custom/random host rename + RegisteredOwner/Org rewrite.
 
 **Search box** filters the 46 cards live by number, tag, title or action name.
+
+**Themes (◐ THEME button):** cycles **Dark → Light → System**. System follows your Windows personalization live (switching Windows theme re-skins the app instantly). Choice persists to `%LOCALAPPDATA%\STEALTH	heme.txt` and is restored on next launch. Every surface — cards, HUD, modals, ComboBox dropdowns, log stream — is themed; the app is also DPI-aware and always opens fully on-screen (fit-to-work-area on scaled displays).
 
 ## 💻 Headless CLI
 

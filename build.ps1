@@ -43,12 +43,12 @@ $refs = @(
 
 # --- compile main app -------------------------------------------------------
 Write-Host "[3/4] Compiling S-T-E-A-L-T-H.exe ..."
-& $csc -nologo -target:winexe '-out:S-T-E-A-L-T-H.exe' @refs 'S-T-E-A-L-T-H.cs'
+& $csc -nologo -target:winexe '-out:S-T-E-A-L-T-H.exe' '-win32manifest:app.manifest' @refs 'S-T-E-A-L-T-H.cs'
 if ($LASTEXITCODE -ne 0) { throw 'main compile failed' }
 
 # --- compile test runner (shares source, its own entry point) ---------------
 Write-Host "[4/4] Compiling S-T-E-A-L-T-H_test.exe ..."
-& $csc -nologo -target:exe -main:STEALTH.TestSuite '-out:S-T-E-A-L-T-H_test.exe' @refs 'S-T-E-A-L-T-H.cs' 'S-T-E-A-L-T-H_test.cs'
+& $csc -nologo -target:exe -main:STEALTH.TestSuite '-out:S-T-E-A-L-T-H_test.exe' '-win32manifest:app.manifest' @refs 'S-T-E-A-L-T-H.cs' 'S-T-E-A-L-T-H_test.cs'
 if ($LASTEXITCODE -ne 0) { throw 'test compile failed' }
 
 Write-Host ''

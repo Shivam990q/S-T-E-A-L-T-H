@@ -70,6 +70,7 @@ namespace STEALTH
             // Test 1: window + XAML tree
             AssertTest("1. Window Instantiation & XAML Tree Resolution", delegate()
             {
+                if (Application.Current == null) new Application(); // production path creates app before window
                 window = new MainWindow();
                 if (window == null) throw new Exception("MainWindow is null");
             });
@@ -244,7 +245,7 @@ namespace STEALTH
                 var root = (UIElement)window.Content;
                 string[] required = new string[] {
                     "TitleBar","BtnClose","BtnMin","BtnMax","BtnMasterRun","BtnAudit","BtnRestore","BtnSchedule","BtnShred","BtnPcName",
-                    "CmbProfile","BtnDry","BtnBackup","BtnQuarantine","TxtSearch",
+                    "CmbProfile","BtnDry","BtnBackup","BtnQuarantine","BtnTheme","TxtSearch",
                     "TxtHost","TxtNet","TxtTelem","TxtRam","TxtStats","TxtLogs","Scroller","PrgBar",
                     "InfoModal","TxtModalTitle","TxtModalDesc","TxtModalPaths","BtnCloseModal","BtnModalGotIt",
                     "PcNameModal","TxtNewPcName","BtnApplyPcName","BtnRandomPcName","BtnClosePcModal","BtnApplyVirtualIdentity",
@@ -303,6 +304,24 @@ namespace STEALTH
                     if (!outp.Contains("SWEEP COMPLETE")) throw new Exception("CLI did not print completion summary");
                     if (!outp.Contains("DRY")) throw new Exception("CLI did not run in dry mode");
                 }
+            });
+
+            // Test 16: theme manager applies + persists Dark/Light/System
+            AssertTest("16. ThemeManager: Dark/Light/System apply + persistence", delegate()
+            {
+                ThemeManager.Load();
+                string original = ThemeManager.Mode;
+                ThemeManager.SetMode("Light");
+                System.Windows.Media.SolidColorBrush wl = Application.Current.Resources["WinBg"] as System.Windows.Media.SolidColorBrush;
+                if (wl == null || wl.Color.ToString() != "#FFEFF4FB") throw new Exception("light WinBg wrong: " + (wl == null ? "null" : wl.Color.ToString()));
+                ThemeManager.SetMode("Dark");
+                System.Windows.Media.SolidColorBrush wd = Application.Current.Resources["WinBg"] as System.Windows.Media.SolidColorBrush;
+                if (wd == null || wd.Color.ToString() != "#FF040711") throw new Exception("dark WinBg wrong: " + (wd == null ? "null" : wd.Color.ToString()));
+                ThemeManager.SetMode("System");
+                string resolved = ThemeManager.Resolved;
+                if (resolved != "Dark" && resolved != "Light") throw new Exception("system resolve invalid: " + resolved);
+                ThemeManager.SetMode(original); // restore user's saved mode
+                if (ThemeManager.Mode != original) throw new Exception("mode persistence broken");
             });
 
             // cleanup

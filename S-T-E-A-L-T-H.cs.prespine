@@ -2449,173 +2449,6 @@ namespace STEALTH
     // MAIN WINDOW — WPF shell
     // ======================================================================================
 
-    // ======================================================================================
-    // THEME MANAGER — Dark / Light / System with persistence + live Windows theme tracking.
-    // All UI colors are DynamicResource brushes keyed by the names below; Apply() swaps
-    // them on Application.Current.Resources so every control re-styles instantly.
-    // ======================================================================================
-
-    public static class ThemeManager
-    {
-        public static readonly string[] Modes = new string[] { "Dark", "Light", "System" };
-        private static string mode = "Dark";
-        private static bool hooked;
-        public static string Mode { get { return mode; } }
-        public static string Resolved { get { return Resolve(); } }
-        public static event Action Changed;
-
-        private static string SettingsPath()
-        {
-            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "STEALTH", "theme.txt");
-        }
-
-        public static void Load()
-        {
-            try
-            {
-                if (File.Exists(SettingsPath()))
-                {
-                    string m = File.ReadAllText(SettingsPath()).Trim();
-                    foreach (string k in Modes) if (k.Equals(m, StringComparison.OrdinalIgnoreCase)) mode = k;
-                }
-            }
-            catch { }
-        }
-
-        public static void SetMode(string m)
-        {
-            foreach (string k in Modes)
-                if (k.Equals(m, StringComparison.OrdinalIgnoreCase)) mode = k;
-            try
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath()));
-                File.WriteAllText(SettingsPath(), mode);
-            }
-            catch { }
-            Apply();
-            HookSystemListener();
-        }
-
-        public static string NextMode()
-        {
-            int i = Array.IndexOf(Modes, mode);
-            return Modes[(i + 1) % Modes.Length];
-        }
-
-        private static bool SystemLight()
-        {
-            try
-            {
-                object v = Registry.GetValue("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", "AppsUseLightTheme", null);
-                return v != null && Convert.ToInt32(v) == 1;
-            }
-            catch { return false; }
-        }
-
-        private static string Resolve() { return mode == "System" ? (SystemLight() ? "Light" : "Dark") : mode; }
-
-        private static void HookSystemListener()
-        {
-            if (hooked) return;
-            hooked = true;
-            try
-            {
-                Microsoft.Win32.SystemEvents.UserPreferenceChanged += delegate
-                {
-                    if (mode == "System") { Apply(); }
-                };
-            }
-            catch { }
-        }
-
-        private static readonly Dictionary<string, string> Dark = new Dictionary<string, string>();
-        private static readonly Dictionary<string, string> Light = new Dictionary<string, string>();
-
-        static ThemeManager()
-        {
-            // ---- DARK (original S-T-E-A-L-T-H palette) ----
-            Dark["WinBg"] = "#040711"; Dark["WinBorder"] = "#00F2FE";
-            Dark["TextPrimary"] = "#F8FAFC"; Dark["TextSecondary"] = "#94A3B8"; Dark["TextMuted"] = "#64748B";
-            Dark["TitleBadgeBg"] = "#0A192F"; Dark["TitleBadgeFg"] = "#00F2FE";
-            Dark["VerBadgeBg"] = "#065F46"; Dark["VerBadgeFg"] = "#34D399";
-            Dark["HudBg"] = "#08101E"; Dark["HudBorder"] = "#1E293B";
-            Dark["OkFg"] = "#34D399"; Dark["WarnFg"] = "#F59E0B"; Dark["NetFg"] = "#38BDF8";
-            Dark["CardBg"] = "#090F1D"; Dark["CardBorder"] = "#1E293B";
-            Dark["CardGoldBg"] = "#0F1626"; Dark["CardGoldBorder"] = "#F59E0B";
-            Dark["TagBg"] = "#0B213F"; Dark["TagBorder"] = "#0284C7"; Dark["TagFg"] = "#38BDF8";
-            Dark["GoldTagBg"] = "#241908"; Dark["GoldTagBorder"] = "#F59E0B"; Dark["GoldTagFg"] = "#FBBF24";
-            Dark["InfoBtnBg"] = "#0D192E"; Dark["InfoBtnFg"] = "#00F2FE"; Dark["InfoBtnBorder"] = "#1E3A8A";
-            Dark["ActionBtnBg"] = "#0D1F38"; Dark["ActionBtnFg"] = "#38BDF8"; Dark["ActionBtnBorder"] = "#0284C7"; Dark["ActionBtnHoverBg"] = "#0284C7";
-            Dark["CrownBtnBg"] = "#221A0C"; Dark["CrownBtnFg"] = "#FBBF24"; Dark["CrownBtnBorder"] = "#F59E0B"; Dark["CrownBtnHoverBg"] = "#F59E0B";
-            Dark["MicroBg"] = "#060B14"; Dark["MicroFg"] = "#94A3B8"; Dark["MicroBorder"] = "#1E293B";
-            Dark["MicroHoverBg"] = "#1E293B"; Dark["MicroHoverBorder"] = "#38BDF8"; Dark["MicroHoverFg"] = "#38BDF8";
-            Dark["GoldMicroBorder"] = "#3A2C10"; Dark["GoldMicroFg"] = "#FCD34D";
-            Dark["GoldMicroHoverBg"] = "#221A0C"; Dark["GoldMicroHoverBorder"] = "#F59E0B"; Dark["GoldMicroHoverFg"] = "#FBBF24";
-            Dark["ToolBtnBg"] = "#0A1424"; Dark["ToolBtnFg"] = "#7DD3FC"; Dark["ToolBtnBorder"] = "#155E75";
-            Dark["ToolBtnHoverBg"] = "#155E75"; Dark["ToolBtnHoverFg"] = "#F8FAFC";
-            Dark["ComboBg"] = "#0A1424"; Dark["ComboFg"] = "#F8FAFC"; Dark["ComboBorder"] = "#1E293B";
-            Dark["ComboPopupBg"] = "#0A1424"; Dark["ComboItemHoverBg"] = "#1E293B"; Dark["ComboItemHoverFg"] = "#38BDF8";
-            Dark["ListBg"] = "#020409";
-            Dark["HeroBg"] = "#081736"; Dark["HeroBorder"] = "#00F2FE";
-            Dark["ProgressBg"] = "#0A192F"; Dark["ProgressFg"] = "#00F2FE";
-            Dark["StreamBg"] = "#020408"; Dark["StreamBorder"] = "#0284C7"; Dark["LogFg"] = "#34D399";
-            Dark["InputBg"] = "#020409"; Dark["InputFg"] = "#00F2FE"; Dark["InputBorder"] = "#1E293B";
-            Dark["ModalOverlay"] = "#E6000000"; Dark["ModalPanelBg"] = "#070F1E"; Dark["BodyFg"] = "#E2E8F0";
-            Dark["CodeBg"] = "#020409"; Dark["CodeBorder"] = "#1E293B"; Dark["CodeFg"] = "#34D399";
-            Dark["CloseFg"] = "#F87171"; Dark["OnAccent"] = "#030712";
-
-            // ---- LIGHT (hand-tuned readable counterpart) ----
-            Light["WinBg"] = "#EFF4FB"; Light["WinBorder"] = "#0369A1";
-            Light["TextPrimary"] = "#0F172A"; Light["TextSecondary"] = "#475569"; Light["TextMuted"] = "#64748B";
-            Light["TitleBadgeBg"] = "#E0F2FE"; Light["TitleBadgeFg"] = "#0369A1";
-            Light["VerBadgeBg"] = "#D1FAE5"; Light["VerBadgeFg"] = "#065F46";
-            Light["HudBg"] = "#FFFFFF"; Light["HudBorder"] = "#D5E0EC";
-            Light["OkFg"] = "#15803D"; Light["WarnFg"] = "#B45309"; Light["NetFg"] = "#0369A1";
-            Light["CardBg"] = "#FFFFFF"; Light["CardBorder"] = "#D5E0EC";
-            Light["CardGoldBg"] = "#FFF8E7"; Light["CardGoldBorder"] = "#D97706";
-            Light["TagBg"] = "#E0F2FE"; Light["TagBorder"] = "#0284C7"; Light["TagFg"] = "#075985";
-            Light["GoldTagBg"] = "#FEF3C7"; Light["GoldTagBorder"] = "#D97706"; Light["GoldTagFg"] = "#92400E";
-            Light["InfoBtnBg"] = "#E0F2FE"; Light["InfoBtnFg"] = "#0369A1"; Light["InfoBtnBorder"] = "#93C5FD";
-            Light["ActionBtnBg"] = "#E0F2FE"; Light["ActionBtnFg"] = "#075985"; Light["ActionBtnBorder"] = "#0284C7"; Light["ActionBtnHoverBg"] = "#0284C7";
-            Light["CrownBtnBg"] = "#FEF3C7"; Light["CrownBtnFg"] = "#92400E"; Light["CrownBtnBorder"] = "#D97706"; Light["CrownBtnHoverBg"] = "#D97706";
-            Light["MicroBg"] = "#FFFFFF"; Light["MicroFg"] = "#334155"; Light["MicroBorder"] = "#C9D6E4";
-            Light["MicroHoverBg"] = "#E0F2FE"; Light["MicroHoverBorder"] = "#0284C7"; Light["MicroHoverFg"] = "#075985";
-            Light["GoldMicroBorder"] = "#E5C368"; Light["GoldMicroFg"] = "#92400E";
-            Light["GoldMicroHoverBg"] = "#FDE68A"; Light["GoldMicroHoverBorder"] = "#D97706"; Light["GoldMicroHoverFg"] = "#78350F";
-            Light["ToolBtnBg"] = "#F0F7FF"; Light["ToolBtnFg"] = "#0369A1"; Light["ToolBtnBorder"] = "#93C5FD";
-            Light["ToolBtnHoverBg"] = "#0369A1"; Light["ToolBtnHoverFg"] = "#FFFFFF";
-            Light["ComboBg"] = "#FFFFFF"; Light["ComboFg"] = "#0F172A"; Light["ComboBorder"] = "#94A3B8";
-            Light["ComboPopupBg"] = "#FFFFFF"; Light["ComboItemHoverBg"] = "#E0F2FE"; Light["ComboItemHoverFg"] = "#075985";
-            Light["ListBg"] = "#FFFFFF";
-            Light["HeroBg"] = "#EFF6FF"; Light["HeroBorder"] = "#0284C7";
-            Light["ProgressBg"] = "#DBEAFE"; Light["ProgressFg"] = "#0284C7";
-            Light["StreamBg"] = "#F7FAFF"; Light["StreamBorder"] = "#0284C7"; Light["LogFg"] = "#15803D";
-            Light["InputBg"] = "#FFFFFF"; Light["InputFg"] = "#0F172A"; Light["InputBorder"] = "#94A3B8";
-            Light["ModalOverlay"] = "#59000000"; Light["ModalPanelBg"] = "#FFFFFF"; Light["BodyFg"] = "#1E293B";
-            Light["CodeBg"] = "#F1F5F9"; Light["CodeBorder"] = "#CBD5E1"; Light["CodeFg"] = "#166534";
-            Light["CloseFg"] = "#DC2626"; Light["OnAccent"] = "#FFFFFF";
-        }
-
-        public static void Apply()
-        {
-            if (Application.Current == null) return;
-            Dictionary<string, string> map = Resolve() == "Light" ? Light : Dark;
-            foreach (KeyValuePair<string, string> kv in map)
-            {
-                try
-                {
-                    SolidColorBrush b = new SolidColorBrush((Color)ColorConverter.ConvertFromString(kv.Value));
-                    b.Freeze();
-                    Application.Current.Resources[kv.Key] = b;
-                }
-                catch { }
-            }
-            Action h = Changed;
-            if (h != null) h();
-        }
-    }
-
-
     public class MainWindow : Window
     {
         private TextBox txtLogs;
@@ -2630,7 +2463,7 @@ namespace STEALTH
         private ListBox lstSessions;
         private ComboBox cmbProfile;
         private TextBox txtSearch;
-        private Button btnDry, btnBackup, btnQuarantine, btnMaster, btnTheme;
+        private Button btnDry, btnBackup, btnQuarantine, btnMaster;
         private List<KeyValuePair<string, FrameworkElement[]>> cardIndex = new List<KeyValuePair<string, FrameworkElement[]>>();
         private DispatcherTimer hudTimer;
         private List<Category> allCats;
@@ -2668,8 +2501,6 @@ namespace STEALTH
             this.SourceInitialized += delegate { ClampToWorkArea(); };
 
             allCats = ActionRegistry.Build();
-            ThemeManager.Load();
-            ThemeManager.Apply();
             BuildUI();
             WireShell();
             StartHud();
@@ -2708,10 +2539,10 @@ namespace STEALTH
         {
             bool gold = c.Gold;
             string cardStyle = gold ? "GoldRowCard" : "RowCard";
-            string tagBg = gold ? "{DynamicResource GoldTagBg}" : "{DynamicResource TagBg}";
-            string tagBorder = gold ? "{DynamicResource GoldTagBorder}" : "{DynamicResource TagBorder}";
-            string tagFg = gold ? "{DynamicResource GoldTagFg}" : "{DynamicResource TagFg}";
-            string titleFg = "{DynamicResource TextPrimary}";
+            string tagBg = gold ? "#241908" : "#0B213F";
+            string tagBorder = gold ? "#F59E0B" : "#0284C7";
+            string tagFg = gold ? "#FBBF24" : "#38BDF8";
+            string titleFg = gold ? "#FBBF24" : "#F8FAFC";
             string masterStyle = gold ? "CrownBtn" : "ActionBtn";
             string prefix = gold ? "\uD83D\uDC51 " : "";
             string risk = c.Risk().ToString();
@@ -2731,9 +2562,9 @@ namespace STEALTH
                       "<Border Background=\"" + tagBg + "\" BorderBrush=\"" + tagBorder + "\" BorderThickness=\"1\" CornerRadius=\"4\" Padding=\"5,1\" Margin=\"0,0,8,0\">" +
                         "<TextBlock Text=\"[" + EscXml(c.Tag) + "]\" FontSize=\"9.5\" FontWeight=\"Bold\" Foreground=\"" + tagFg + "\"/></Border>" +
                       "<TextBlock Text=\"" + prefix + EscXml(c.Num) + ". " + EscXml(c.Title) + "\" FontSize=\"13\" FontWeight=\"Bold\" Foreground=\"" + titleFg + "\"/>" +
-                      "<TextBlock Text=\"  [" + risk + des + "]\" FontSize=\"9.5\" Foreground=\"{DynamicResource TextMuted}\" VerticalAlignment=\"Center\"/>" +
+                      "<TextBlock Text=\"  [" + risk + des + "]\" FontSize=\"9.5\" Foreground=\"#64748B\" VerticalAlignment=\"Center\"/>" +
                     "</StackPanel>" +
-                    "<TextBlock Text=\"" + EscXml(c.Desc) + "\" FontSize=\"11\" Foreground=\"{DynamicResource TextSecondary}\" Margin=\"0,3,0,0\" TextWrapping=\"Wrap\"/>" +
+                    "<TextBlock Text=\"" + EscXml(c.Desc) + "\" FontSize=\"11\" Foreground=\"#94A3B8\" Margin=\"0,3,0,0\" TextWrapping=\"Wrap\"/>" +
                   "</StackPanel>" +
                   "<Button x:Name=\"BtnInfo_" + c.Num + "\" Grid.Column=\"1\" Style=\"{StaticResource InfoBtn}\" Margin=\"8,0,8,0\" VerticalAlignment=\"Center\"/>" +
                   "<Button x:Name=\"BtnCat_" + c.Num + "\" Grid.Column=\"2\" Style=\"{StaticResource " + masterStyle + "}\" Content=\"" + (gold ? "\uD83D\uDC51 Run All" : "Run All") + "\" VerticalAlignment=\"Center\"/>" +
@@ -2769,23 +2600,23 @@ namespace STEALTH
             </Setter>
         </Style>
         <Style TargetType=""Border"" x:Key=""RowCard"">
-            <Setter Property=""Background"" Value=""{DynamicResource CardBg}""/>
-            <Setter Property=""BorderBrush"" Value=""{DynamicResource CardBorder}""/>
+            <Setter Property=""Background"" Value=""#090F1D""/>
+            <Setter Property=""BorderBrush"" Value=""#1E293B""/>
             <Setter Property=""BorderThickness"" Value=""1""/>
             <Setter Property=""CornerRadius"" Value=""10""/>
             <Setter Property=""Padding"" Value=""14,10""/>
             <Setter Property=""Margin"" Value=""0,0,0,10""/>
         </Style>
         <Style TargetType=""Border"" x:Key=""GoldRowCard"" BasedOn=""{StaticResource RowCard}"">
-            <Setter Property=""Background"" Value=""{DynamicResource CardGoldBg}""/>
-            <Setter Property=""BorderBrush"" Value=""{DynamicResource CardGoldBorder}""/>
+            <Setter Property=""Background"" Value=""#0F1626""/>
+            <Setter Property=""BorderBrush"" Value=""#F59E0B""/>
         </Style>
         <Style TargetType=""Button"" x:Key=""ActionBtn"">
-            <Setter Property=""Background"" Value=""{DynamicResource ActionBtnBg}""/>
-            <Setter Property=""Foreground"" Value=""{DynamicResource ActionBtnFg}""/>
+            <Setter Property=""Background"" Value=""#0D1F38""/>
+            <Setter Property=""Foreground"" Value=""#38BDF8""/>
             <Setter Property=""FontSize"" Value=""11.5""/>
             <Setter Property=""FontWeight"" Value=""Bold""/>
-            <Setter Property=""BorderBrush"" Value=""{DynamicResource ActionBtnBorder}""/>
+            <Setter Property=""BorderBrush"" Value=""#0284C7""/>
             <Setter Property=""BorderThickness"" Value=""1""/>
             <Setter Property=""Cursor"" Value=""Hand""/>
             <Setter Property=""Padding"" Value=""12,6""/>
@@ -2796,17 +2627,17 @@ namespace STEALTH
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property=""IsMouseOver"" Value=""True"">
-                            <Setter TargetName=""Brd"" Property=""Background"" Value=""{DynamicResource ActionBtnHoverBg}""/>
-                            <Setter Property=""Foreground"" Value=""{DynamicResource OnAccent}""/>
+                            <Setter TargetName=""Brd"" Property=""Background"" Value=""#0284C7""/>
+                            <Setter Property=""Foreground"" Value=""#030712""/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate></Setter.Value>
             </Setter>
         </Style>
         <Style TargetType=""Button"" x:Key=""CrownBtn"" BasedOn=""{StaticResource ActionBtn}"">
-            <Setter Property=""Background"" Value=""{DynamicResource CrownBtnBg}""/>
-            <Setter Property=""Foreground"" Value=""{DynamicResource CrownBtnFg}""/>
-            <Setter Property=""BorderBrush"" Value=""{DynamicResource CrownBtnBorder}""/>
+            <Setter Property=""Background"" Value=""#221A0C""/>
+            <Setter Property=""Foreground"" Value=""#FBBF24""/>
+            <Setter Property=""BorderBrush"" Value=""#F59E0B""/>
             <Setter Property=""Template"">
                 <Setter.Value><ControlTemplate TargetType=""Button"">
                     <Border x:Name=""Brd"" Background=""{TemplateBinding Background}"" BorderBrush=""{TemplateBinding BorderBrush}"" BorderThickness=""{TemplateBinding BorderThickness}"" CornerRadius=""7"">
@@ -2814,19 +2645,19 @@ namespace STEALTH
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property=""IsMouseOver"" Value=""True"">
-                            <Setter TargetName=""Brd"" Property=""Background"" Value=""{DynamicResource CrownBtnHoverBg}""/>
-                            <Setter Property=""Foreground"" Value=""{DynamicResource OnAccent}""/>
+                            <Setter TargetName=""Brd"" Property=""Background"" Value=""#F59E0B""/>
+                            <Setter Property=""Foreground"" Value=""#030712""/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate></Setter.Value>
             </Setter>
         </Style>
         <Style TargetType=""Button"" x:Key=""MicroBtn"">
-            <Setter Property=""Background"" Value=""{DynamicResource MicroBg}""/>
-            <Setter Property=""Foreground"" Value=""{DynamicResource MicroFg}""/>
+            <Setter Property=""Background"" Value=""#060B14""/>
+            <Setter Property=""Foreground"" Value=""#94A3B8""/>
             <Setter Property=""FontSize"" Value=""10.5""/>
             <Setter Property=""FontWeight"" Value=""SemiBold""/>
-            <Setter Property=""BorderBrush"" Value=""{DynamicResource MicroBorder}""/>
+            <Setter Property=""BorderBrush"" Value=""#1E293B""/>
             <Setter Property=""BorderThickness"" Value=""1""/>
             <Setter Property=""Cursor"" Value=""Hand""/>
             <Setter Property=""Padding"" Value=""8,4""/>
@@ -2838,17 +2669,17 @@ namespace STEALTH
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property=""IsMouseOver"" Value=""True"">
-                            <Setter TargetName=""Brd"" Property=""Background"" Value=""{DynamicResource MicroHoverBg}""/>
-                            <Setter TargetName=""Brd"" Property=""BorderBrush"" Value=""{DynamicResource MicroHoverBorder}""/>
-                            <Setter Property=""Foreground"" Value=""{DynamicResource MicroHoverFg}""/>
+                            <Setter TargetName=""Brd"" Property=""Background"" Value=""#1E293B""/>
+                            <Setter TargetName=""Brd"" Property=""BorderBrush"" Value=""#38BDF8""/>
+                            <Setter Property=""Foreground"" Value=""#38BDF8""/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate></Setter.Value>
             </Setter>
         </Style>
         <Style TargetType=""Button"" x:Key=""GoldMicroBtn"" BasedOn=""{StaticResource MicroBtn}"">
-            <Setter Property=""BorderBrush"" Value=""{DynamicResource GoldMicroBorder}""/>
-            <Setter Property=""Foreground"" Value=""{DynamicResource GoldMicroFg}""/>
+            <Setter Property=""BorderBrush"" Value=""#3A2C10""/>
+            <Setter Property=""Foreground"" Value=""#FCD34D""/>
             <Setter Property=""Template"">
                 <Setter.Value><ControlTemplate TargetType=""Button"">
                     <Border x:Name=""Brd"" Background=""{TemplateBinding Background}"" BorderBrush=""{TemplateBinding BorderBrush}"" BorderThickness=""{TemplateBinding BorderThickness}"" CornerRadius=""5"">
@@ -2856,20 +2687,20 @@ namespace STEALTH
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property=""IsMouseOver"" Value=""True"">
-                            <Setter TargetName=""Brd"" Property=""Background"" Value=""{DynamicResource GoldMicroHoverBg}""/>
-                            <Setter TargetName=""Brd"" Property=""BorderBrush"" Value=""{DynamicResource GoldMicroHoverBorder}""/>
-                            <Setter Property=""Foreground"" Value=""{DynamicResource GoldMicroHoverFg}""/>
+                            <Setter TargetName=""Brd"" Property=""Background"" Value=""#221A0C""/>
+                            <Setter TargetName=""Brd"" Property=""BorderBrush"" Value=""#F59E0B""/>
+                            <Setter Property=""Foreground"" Value=""#FBBF24""/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate></Setter.Value>
             </Setter>
         </Style>
         <Style TargetType=""Button"" x:Key=""InfoBtn"">
-            <Setter Property=""Background"" Value=""{DynamicResource InfoBtnBg}""/>
-            <Setter Property=""Foreground"" Value=""{DynamicResource InfoBtnFg}""/>
+            <Setter Property=""Background"" Value=""#0D192E""/>
+            <Setter Property=""Foreground"" Value=""#00F2FE""/>
             <Setter Property=""FontSize"" Value=""10.5""/>
             <Setter Property=""FontWeight"" Value=""Bold""/>
-            <Setter Property=""BorderBrush"" Value=""{DynamicResource InfoBtnBorder}""/>
+            <Setter Property=""BorderBrush"" Value=""#1E3A8A""/>
             <Setter Property=""BorderThickness"" Value=""1""/>
             <Setter Property=""Cursor"" Value=""Hand""/>
             <Setter Property=""Padding"" Value=""8,5""/>
@@ -2880,19 +2711,19 @@ namespace STEALTH
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property=""IsMouseOver"" Value=""True"">
-                            <Setter TargetName=""Brd"" Property=""Background"" Value=""{DynamicResource ActionBtnHoverBg}""/>
-                            <Setter Property=""Foreground"" Value=""{DynamicResource OnAccent}""/>
+                            <Setter TargetName=""Brd"" Property=""Background"" Value=""#00F2FE""/>
+                            <Setter Property=""Foreground"" Value=""#030712""/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate></Setter.Value>
             </Setter>
         </Style>
         <Style TargetType=""Button"" x:Key=""ToolBtn"">
-            <Setter Property=""Background"" Value=""{DynamicResource ToolBtnBg}""/>
-            <Setter Property=""Foreground"" Value=""{DynamicResource ToolBtnFg}""/>
+            <Setter Property=""Background"" Value=""#0A1424""/>
+            <Setter Property=""Foreground"" Value=""#7DD3FC""/>
             <Setter Property=""FontSize"" Value=""10.5""/>
             <Setter Property=""FontWeight"" Value=""Bold""/>
-            <Setter Property=""BorderBrush"" Value=""{DynamicResource ToolBtnBorder}""/>
+            <Setter Property=""BorderBrush"" Value=""#155E75""/>
             <Setter Property=""BorderThickness"" Value=""1""/>
             <Setter Property=""Cursor"" Value=""Hand""/>
             <Setter Property=""Padding"" Value=""10,6""/>
@@ -2904,102 +2735,29 @@ namespace STEALTH
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property=""IsMouseOver"" Value=""True"">
-                            <Setter TargetName=""Brd"" Property=""Background"" Value=""{DynamicResource ToolBtnHoverBg}""/>
-                            <Setter Property=""Foreground"" Value=""{DynamicResource ToolBtnHoverFg}""/>
+                            <Setter TargetName=""Brd"" Property=""Background"" Value=""#155E75""/>
+                            <Setter Property=""Foreground"" Value=""#F8FAFC""/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate></Setter.Value>
             </Setter>
         </Style>
         <Style TargetType=""ComboBox"">
-            <Setter Property=""Background"" Value=""{DynamicResource ComboBg}""/>
-            <Setter Property=""Foreground"" Value=""{DynamicResource ComboFg}""/>
-            <Setter Property=""BorderBrush"" Value=""{DynamicResource ComboBorder}""/>
+            <Setter Property=""Background"" Value=""#0A1424""/>
+            <Setter Property=""Foreground"" Value=""#F8FAFC""/>
             <Setter Property=""FontSize"" Value=""11""/>
             <Setter Property=""Padding"" Value=""8,5""/>
-            <Setter Property=""Template"">
-                <Setter.Value><ControlTemplate TargetType=""ComboBox"">
-                    <Grid>
-                        <ToggleButton x:Name=""ToggleButton"" Focusable=""false"" ClickMode=""Press""
-                                      IsChecked=""{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"">
-                            <ToggleButton.Template>
-                                <ControlTemplate TargetType=""ToggleButton"">
-                                    <Border x:Name=""TbBrd"" Background=""{DynamicResource ComboBg}"" BorderBrush=""{DynamicResource ComboBorder}"" BorderThickness=""1"" CornerRadius=""6"">
-                                        <TextBlock Text=""▾"" HorizontalAlignment=""Right"" VerticalAlignment=""Center"" Margin=""0,0,9,0"" Foreground=""{DynamicResource ComboFg}""/>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property=""IsMouseOver"" Value=""True"">
-                                            <Setter TargetName=""TbBrd"" Property=""BorderBrush"" Value=""{DynamicResource ActionBtnBorder}""/>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </ToggleButton.Template>
-                        </ToggleButton>
-                        <ContentPresenter Content=""{TemplateBinding SelectionBoxItem}"" ContentTemplate=""{TemplateBinding SelectionBoxItemTemplate}""
-                                          Margin=""10,0,26,0"" VerticalAlignment=""Center"" IsHitTestVisible=""False""
-                                          TextElement.Foreground=""{DynamicResource ComboFg}""/>
-                        <Popup x:Name=""PART_Popup"" IsOpen=""{TemplateBinding IsDropDownOpen}"" Placement=""Bottom""
-                               AllowsTransparency=""True"" PopupAnimation=""Slide"" Focusable=""False"">
-                            <Border Background=""{DynamicResource ComboPopupBg}"" BorderBrush=""{DynamicResource ComboBorder}"" BorderThickness=""1"" CornerRadius=""6""
-                                    MinWidth=""{TemplateBinding ActualWidth}"" MaxHeight=""220"" Margin=""0,2,0,0"">
-                                <ScrollViewer VerticalScrollBarVisibility=""Auto"">
-                                    <ItemsPresenter KeyboardNavigation.DirectionalNavigation=""Contained""/>
-                                </ScrollViewer>
-                            </Border>
-                        </Popup>
-                    </Grid>
-                </ControlTemplate></Setter.Value>
-            </Setter>
-        </Style>
-        <Style TargetType=""ComboBoxItem"">
-            <Setter Property=""Foreground"" Value=""{DynamicResource ComboFg}""/>
-            <Setter Property=""Template"">
-                <Setter.Value><ControlTemplate TargetType=""ComboBoxItem"">
-                    <Border x:Name=""Brd"" Background=""Transparent"" Padding=""10,6"">
-                        <ContentPresenter/>
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property=""IsHighlighted"" Value=""True"">
-                            <Setter TargetName=""Brd"" Property=""Background"" Value=""{DynamicResource ComboItemHoverBg}""/>
-                            <Setter Property=""Foreground"" Value=""{DynamicResource ComboItemHoverFg}""/>
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate></Setter.Value>
-            </Setter>
-        </Style>
-        <Style TargetType=""ListBox"">
-            <Setter Property=""Background"" Value=""{DynamicResource ListBg}""/>
-            <Setter Property=""Foreground"" Value=""{DynamicResource LogFg}""/>
-            <Setter Property=""BorderBrush"" Value=""{DynamicResource ComboBorder}""/>
-        </Style>
-        <Style TargetType=""ListBoxItem"">
-            <Setter Property=""Foreground"" Value=""{DynamicResource LogFg}""/>
-            <Setter Property=""Template"">
-                <Setter.Value><ControlTemplate TargetType=""ListBoxItem"">
-                    <Border x:Name=""Brd"" Background=""Transparent"" Padding=""8,4"">
-                        <ContentPresenter/>
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property=""IsSelected"" Value=""True"">
-                            <Setter TargetName=""Brd"" Property=""Background"" Value=""{DynamicResource ComboItemHoverBg}""/>
-                        </Trigger>
-                        <Trigger Property=""IsMouseOver"" Value=""True"">
-                            <Setter TargetName=""Brd"" Property=""Background"" Value=""{DynamicResource ComboItemHoverBg}""/>
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate></Setter.Value>
-            </Setter>
         </Style>
         <Style TargetType=""TextBox"">
-            <Setter Property=""Background"" Value=""{DynamicResource InputBg}""/>
-            <Setter Property=""Foreground"" Value=""{DynamicResource InputFg}""/>
-            <Setter Property=""BorderBrush"" Value=""{DynamicResource InputBorder}""/>
+            <Setter Property=""Background"" Value=""#020409""/>
+            <Setter Property=""Foreground"" Value=""#00F2FE""/>
+            <Setter Property=""BorderBrush"" Value=""#1E293B""/>
             <Setter Property=""BorderThickness"" Value=""1""/>
-            <Setter Property=""CaretBrush"" Value=""{DynamicResource InputFg}""/>
+            <Setter Property=""CaretBrush"" Value=""#00F2FE""/>
         </Style>
     </Grid.Resources>
 
-    <Border Background=""{DynamicResource WinBg}"" BorderBrush=""{DynamicResource WinBorder}"" BorderThickness=""1.5"" CornerRadius=""14"" Margin=""8"">
+    <Border Background=""#040711"" BorderBrush=""#00F2FE"" BorderThickness=""1.5"" CornerRadius=""14"" Margin=""8"">
         <Grid Margin=""16"">
             <Grid.RowDefinitions>
                 <RowDefinition Height=""Auto""/>
@@ -3015,19 +2773,19 @@ namespace STEALTH
             <Grid Grid.Row=""0"" x:Name=""TitleBar"" Background=""Transparent"" Margin=""0,0,0,10"">
                 <Grid.ColumnDefinitions><ColumnDefinition Width=""*""/><ColumnDefinition Width=""Auto""/></Grid.ColumnDefinitions>
                 <StackPanel Grid.Column=""0"" Orientation=""Horizontal"" VerticalAlignment=""Center"">
-                    <Border Background=""{DynamicResource TitleBadgeBg}"" BorderBrush=""{DynamicResource WinBorder}"" BorderThickness=""1.5"" CornerRadius=""8"" Padding=""7,4"" Margin=""0,0,12,0"">
-                        <TextBlock Text=""S 🛡 T"" FontSize=""12"" FontWeight=""ExtraBold"" Foreground=""{DynamicResource TitleBadgeFg}""/>
+                    <Border Background=""#0A192F"" BorderBrush=""#00F2FE"" BorderThickness=""1.5"" CornerRadius=""8"" Padding=""7,4"" Margin=""0,0,12,0"">
+                        <TextBlock Text=""S 🛡 T"" FontSize=""12"" FontWeight=""ExtraBold"" Foreground=""#00F2FE""/>
                     </Border>
-                    <TextBlock Text=""S - T - E - A - L - T - H"" FontSize=""21"" FontWeight=""ExtraBold"" Foreground=""{DynamicResource WinBorder}""/>
-                    <Border Background=""{DynamicResource VerBadgeBg}"" CornerRadius=""6"" Padding=""8,3"" Margin=""12,0,0,0"">
-                        <TextBlock Text=""v8.0 ABSOLUTE"" FontSize=""10.5"" FontWeight=""Bold"" Foreground=""{DynamicResource VerBadgeFg}""/>
+                    <TextBlock Text=""S - T - E - A - L - T - H"" FontSize=""21"" FontWeight=""ExtraBold"" Foreground=""#00F2FE""/>
+                    <Border Background=""#065F46"" CornerRadius=""6"" Padding=""8,3"" Margin=""12,0,0,0"">
+                        <TextBlock Text=""v8.0 ABSOLUTE"" FontSize=""10.5"" FontWeight=""Bold"" Foreground=""#34D399""/>
                     </Border>
-                    <TextBlock Text=""// 46-VECTOR ENGINE · DRY-RUN · BACKUP · QUARANTINE · AUDIT · SCHEDULER"" FontSize=""10.5"" Foreground=""{DynamicResource TextMuted}"" VerticalAlignment=""Center"" Margin=""10,0,0,0""/>
+                    <TextBlock Text=""// 46-VECTOR ENGINE · DRY-RUN · BACKUP · QUARANTINE · AUDIT · SCHEDULER"" FontSize=""10.5"" Foreground=""#64748B"" VerticalAlignment=""Center"" Margin=""10,0,0,0""/>
                 </StackPanel>
                 <StackPanel Grid.Column=""1"" Orientation=""Horizontal"">
-                    <Button x:Name=""BtnMin"" Content=""─"" Width=""32"" Height=""32"" Background=""Transparent"" Foreground=""{DynamicResource TextSecondary}"" FontWeight=""Bold"" BorderThickness=""0"" Cursor=""Hand"" Margin=""0,0,4,0""/>
-                    <Button x:Name=""BtnMax"" Content=""🗖"" Width=""32"" Height=""32"" Background=""Transparent"" Foreground=""{DynamicResource TextSecondary}"" FontWeight=""Bold"" BorderThickness=""0"" Cursor=""Hand"" Margin=""0,0,4,0""/>
-                    <Button x:Name=""BtnClose"" Content=""✕"" Width=""32"" Height=""32"" Background=""Transparent"" Foreground=""{DynamicResource CloseFg}"" FontWeight=""Bold"" BorderThickness=""0"" Cursor=""Hand""/>
+                    <Button x:Name=""BtnMin"" Content=""─"" Width=""32"" Height=""32"" Background=""Transparent"" Foreground=""#94A3B8"" FontWeight=""Bold"" BorderThickness=""0"" Cursor=""Hand"" Margin=""0,0,4,0""/>
+                    <Button x:Name=""BtnMax"" Content=""🗖"" Width=""32"" Height=""32"" Background=""Transparent"" Foreground=""#94A3B8"" FontWeight=""Bold"" BorderThickness=""0"" Cursor=""Hand"" Margin=""0,0,4,0""/>
+                    <Button x:Name=""BtnClose"" Content=""✕"" Width=""32"" Height=""32"" Background=""Transparent"" Foreground=""#F87171"" FontWeight=""Bold"" BorderThickness=""0"" Cursor=""Hand""/>
                 </StackPanel>
             </Grid>
 
@@ -3035,38 +2793,30 @@ namespace STEALTH
             <Grid Grid.Row=""1"" Margin=""0,0,0,10"">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width=""*""/><ColumnDefinition Width=""*""/><ColumnDefinition Width=""*""/><ColumnDefinition Width=""*""/>
+                    <ColumnDefinition Width=""Auto""/>
                 </Grid.ColumnDefinitions>
-                <Border Grid.Column=""0"" Background=""{DynamicResource HudBg}"" BorderBrush=""{DynamicResource HudBorder}"" BorderThickness=""1"" CornerRadius=""8"" Padding=""12,7"" Margin=""3"">
-                    <StackPanel>
-                        <TextBlock Text=""● MACHINE IDENT"" FontSize=""9"" FontWeight=""Bold"" Foreground=""{DynamicResource TextMuted}""/>
-                        <TextBlock x:Name=""TxtHost"" Text=""..."" FontSize=""11.5"" FontWeight=""Bold"" Foreground=""{DynamicResource TextPrimary}"" Margin=""0,2,0,0""/>
-                    </StackPanel>
+                <Border Grid.Column=""0"" Background=""#08101E"" BorderBrush=""#1E293B"" BorderThickness=""1"" CornerRadius=""8"" Padding=""12,7"" Margin=""3"">
+                    <StackPanel><TextBlock Text=""● MACHINE IDENT"" FontSize=""9"" FontWeight=""Bold"" Foreground=""#64748B""/><TextBlock x:Name=""TxtHost"" Text=""..."" FontSize=""11.5"" FontWeight=""Bold"" Foreground=""#F8FAFC"" Margin=""0,2,0,0""/></StackPanel>
                 </Border>
-                <Border Grid.Column=""1"" Background=""{DynamicResource HudBg}"" BorderBrush=""{DynamicResource HudBorder}"" BorderThickness=""1"" CornerRadius=""8"" Padding=""12,7"" Margin=""3"">
-                    <StackPanel>
-                        <TextBlock Text=""● NET INTERFACE"" FontSize=""9"" FontWeight=""Bold"" Foreground=""{DynamicResource TextMuted}""/>
-                        <TextBlock x:Name=""TxtNet"" Text=""..."" FontSize=""11.5"" FontWeight=""Bold"" Foreground=""{DynamicResource NetFg}"" Margin=""0,2,0,0""/>
-                    </StackPanel>
+                <Border Grid.Column=""1"" Background=""#08101E"" BorderBrush=""#1E293B"" BorderThickness=""1"" CornerRadius=""8"" Padding=""12,7"" Margin=""3"">
+                    <StackPanel><TextBlock Text=""● NET INTERFACE"" FontSize=""9"" FontWeight=""Bold"" Foreground=""#64748B""/><TextBlock x:Name=""TxtNet"" Text=""..."" FontSize=""11.5"" FontWeight=""Bold"" Foreground=""#38BDF8"" Margin=""0,2,0,0""/></StackPanel>
                 </Border>
-                <Border Grid.Column=""2"" Background=""{DynamicResource HudBg}"" BorderBrush=""{DynamicResource HudBorder}"" BorderThickness=""1"" CornerRadius=""8"" Padding=""12,7"" Margin=""3"">
-                    <StackPanel>
-                        <TextBlock Text=""● TELEMETRY STATE"" FontSize=""9"" FontWeight=""Bold"" Foreground=""{DynamicResource TextMuted}""/>
-                        <TextBlock x:Name=""TxtTelem"" Text=""..."" FontSize=""11.5"" FontWeight=""Bold"" Foreground=""{DynamicResource OkFg}"" Margin=""0,2,0,0""/>
-                    </StackPanel>
+                <Border Grid.Column=""2"" Background=""#08101E"" BorderBrush=""#1E293B"" BorderThickness=""1"" CornerRadius=""8"" Padding=""12,7"" Margin=""3"">
+                    <StackPanel><TextBlock Text=""● TELEMETRY STATE"" FontSize=""9"" FontWeight=""Bold"" Foreground=""#64748B""/><TextBlock x:Name=""TxtTelem"" Text=""..."" FontSize=""11.5"" FontWeight=""Bold"" Foreground=""#34D399"" Margin=""0,2,0,0""/></StackPanel>
                 </Border>
-                <Border Grid.Column=""3"" Background=""{DynamicResource HudBg}"" BorderBrush=""{DynamicResource HudBorder}"" BorderThickness=""1"" CornerRadius=""8"" Padding=""12,7"" Margin=""3"">
+                <Border Grid.Column=""3"" Background=""#08101E"" BorderBrush=""#1E293B"" BorderThickness=""1"" CornerRadius=""8"" Padding=""12,7"" Margin=""3"">
                     <StackPanel>
-                        <TextBlock Text=""● RAM / RESULT COUNTERS"" FontSize=""9"" FontWeight=""Bold"" Foreground=""{DynamicResource TextMuted}""/>
-                        <TextBlock x:Name=""TxtRam"" Text=""..."" FontSize=""11.5"" FontWeight=""Bold"" Foreground=""{DynamicResource WarnFg}"" Margin=""0,2,0,0""/>
-                        <TextBlock x:Name=""TxtStats"" Text=""OK:0  FAIL:0  SKIP:0"" FontSize=""10.5"" FontWeight=""Bold"" Foreground=""{DynamicResource TextMuted}"" Margin=""0,2,0,0""/>
+                        <TextBlock Text=""● RAM / RESULT COUNTERS"" FontSize=""9"" FontWeight=""Bold"" Foreground=""#64748B""/>
+                        <TextBlock x:Name=""TxtRam"" Text=""..."" FontSize=""11.5"" FontWeight=""Bold"" Foreground=""#F59E0B"" Margin=""0,2,0,0""/>
+                        <TextBlock x:Name=""TxtStats"" Text=""OK:0  FAIL:0  SKIP:0"" FontSize=""10.5"" FontWeight=""Bold"" Margin=""0,2,0,0""/>
                     </StackPanel>
                 </Border>
             </Grid>
 
             <!-- Toolbar -->
-            <Border Grid.Row=""2"" Background=""{DynamicResource HudBg}"" BorderBrush=""{DynamicResource HudBorder}"" BorderThickness=""1"" CornerRadius=""8"" Padding=""10,8"" Margin=""0,0,0,10"">
+            <Border Grid.Row=""2"" Background=""#08101E"" BorderBrush=""#1E293B"" BorderThickness=""1"" CornerRadius=""8"" Padding=""10,8"" Margin=""0,0,0,10"">
                 <StackPanel Orientation=""Horizontal"">
-                    <TextBlock Text=""PROFILE:"" FontSize=""10.5"" FontWeight=""Bold"" Foreground=""{DynamicResource TextMuted}"" VerticalAlignment=""Center"" Margin=""0,0,6,0""/>
+                    <TextBlock Text=""PROFILE:"" FontSize=""10.5"" FontWeight=""Bold"" Foreground=""#64748B"" VerticalAlignment=""Center"" Margin=""0,0,6,0""/>
                     <ComboBox x:Name=""CmbProfile"" Width=""130"" Height=""30"" SelectedIndex=""1"" Margin=""0,0,10,0"">
                         <ComboBoxItem Content=""🟢 Safe""/>
                         <ComboBoxItem Content=""🟡 Balanced""/>
@@ -3075,19 +2825,18 @@ namespace STEALTH
                     <Button x:Name=""BtnDry"" Style=""{StaticResource ToolBtn}"" Content=""◌ DRY-RUN: OFF"" Height=""30""/>
                     <Button x:Name=""BtnBackup"" Style=""{StaticResource ToolBtn}"" Content=""💾 BACKUP: ON"" Height=""30""/>
                     <Button x:Name=""BtnQuarantine"" Style=""{StaticResource ToolBtn}"" Content=""📦 QUARANTINE: ON"" Height=""30""/>
-                    <Button x:Name=""BtnTheme"" Style=""{StaticResource ToolBtn}"" Content=""◐ THEME"" Height=""30""/>
-                    <TextBox x:Name=""TxtSearch"" Width=""200"" Height=""30"" VerticalContentAlignment=""Center"" Padding=""6,0"" Margin=""10,0,0,0"" FontSize=""11""/>
-                    <TextBlock Text=""🔍 filter"" FontSize=""10"" Foreground=""{DynamicResource TextMuted}"" VerticalAlignment=""Center"" Margin=""6,0,0,0""/>
+                    <TextBox x:Name=""TxtSearch"" Width=""210"" Height=""30"" VerticalContentAlignment=""Center"" Padding=""6,0"" Margin=""10,0,0,0"" FontSize=""11""/>
+                    <TextBlock Text=""🔍 filter"" FontSize=""10"" Foreground=""#64748B"" VerticalAlignment=""Center"" Margin=""6,0,0,0""/>
                 </StackPanel>
             </Border>
 
             <!-- Master hero -->
-            <Border Grid.Row=""3"" Background=""{DynamicResource HeroBg}"" BorderBrush=""{DynamicResource HeroBorder}"" BorderThickness=""1.5"" CornerRadius=""12"" Padding=""14,10"" Margin=""0,0,0,10"">
+            <Border Grid.Row=""3"" Background=""#081736"" BorderBrush=""#00F2FE"" BorderThickness=""1.5"" CornerRadius=""12"" Padding=""14,10"" Margin=""0,0,0,10"">
                 <Grid>
                     <Grid.ColumnDefinitions><ColumnDefinition Width=""*""/><ColumnDefinition Width=""Auto""/></Grid.ColumnDefinitions>
                     <StackPanel Grid.Column=""0"" VerticalAlignment=""Center"">
-                        <TextBlock Text=""⚡ 1-CLICK MASTER S-T-E-A-L-T-H PROTOCOL"" FontSize=""14.5"" FontWeight=""ExtraBold"" Foreground=""{DynamicResource TextPrimary}""/>
-                        <TextBlock Text=""Runs every vector filtered by profile. Safe=only-safe · Balanced=+medium (non-destructive) · Paranoid=everything incl. destructive. Backups+quarantine always recorded."" FontSize=""10.5"" Foreground=""{DynamicResource TextSecondary}"" TextWrapping=""Wrap""/>
+                        <TextBlock Text=""⚡ 1-CLICK MASTER S-T-E-A-L-T-H PROTOCOL"" FontSize=""14.5"" FontWeight=""ExtraBold"" Foreground=""#F8FAFC""/>
+                        <TextBlock Text=""Runs every vector filtered by profile. Safe=only-safe · Balanced=+medium (non-destructive) · Paranoid=everything incl. destructive. Backups+quarantine always recorded."" FontSize=""10.5"" Foreground=""#94A3B8"" TextWrapping=""Wrap""/>
                         <StackPanel Orientation=""Horizontal"" Margin=""0,6,0,0"">
                             <Button x:Name=""BtnAudit"" Style=""{StaticResource ToolBtn}"" Content=""📊 PRIVACY AUDIT (read-only)""/>
                             <Button x:Name=""BtnRestore"" Style=""{StaticResource ToolBtn}"" Content=""↩ RESTORE SESSION""/>
@@ -3123,38 +2872,38 @@ namespace STEALTH
 
             <!-- Progress -->
             <Grid Grid.Row=""5"" Margin=""0,0,0,6"">
-                <ProgressBar x:Name=""PrgBar"" Height=""3"" Background=""{DynamicResource ProgressBg}"" Foreground=""{DynamicResource ProgressFg}"" BorderThickness=""0""/>
+                <ProgressBar x:Name=""PrgBar"" Height=""3"" Background=""#0A192F"" Foreground=""#00F2FE"" BorderThickness=""0""/>
             </Grid>
 
             <!-- Log -->
-            <Border Grid.Row=""6"" Background=""{DynamicResource StreamBg}"" BorderBrush=""{DynamicResource StreamBorder}"" BorderThickness=""1"" CornerRadius=""10"" Padding=""12"">
+            <Border Grid.Row=""6"" Background=""#020408"" BorderBrush=""#0284C7"" BorderThickness=""1"" CornerRadius=""10"" Padding=""12"">
                 <Grid>
                     <Grid.RowDefinitions><RowDefinition Height=""Auto""/><RowDefinition Height=""*""/></Grid.RowDefinitions>
                     <StackPanel Grid.Row=""0"" Orientation=""Horizontal"" Margin=""0,0,0,4"">
-                        <TextBlock Text=""▶ LIVE FORENSIC STREAM — every line is a real result (OK/FAIL/SKIP), not a marketing claim"" FontSize=""10"" FontWeight=""Bold"" Foreground=""{DynamicResource WinBorder}""/>
+                        <TextBlock Text=""▶ LIVE FORENSIC STREAM — every line is a real result (OK/FAIL/SKIP), not a marketing claim"" FontSize=""10"" FontWeight=""Bold"" Foreground=""#00F2FE""/>
                     </StackPanel>
                     <ScrollViewer Grid.Row=""1"" x:Name=""Scroller"" VerticalScrollBarVisibility=""Auto"">
-                        <TextBox x:Name=""TxtLogs"" Background=""Transparent"" Foreground=""{DynamicResource LogFg}"" FontFamily=""Consolas"" FontSize=""11"" BorderThickness=""0"" IsReadOnly=""True"" TextWrapping=""Wrap""/>
+                        <TextBox x:Name=""TxtLogs"" Background=""Transparent"" Foreground=""#34D399"" FontFamily=""Consolas"" FontSize=""11"" BorderThickness=""0"" IsReadOnly=""True"" TextWrapping=""Wrap""/>
                     </ScrollViewer>
                 </Grid>
             </Border>
 
             <!-- INFO MODAL -->
-            <Border x:Name=""InfoModal"" Background=""{DynamicResource ModalOverlay}"" Visibility=""Collapsed"" CornerRadius=""14"" Margin=""8"">
-                <Border Background=""{DynamicResource ModalPanelBg}"" BorderBrush=""{DynamicResource WinBorder}"" BorderThickness=""1.5"" CornerRadius=""14"" Width=""680"" MaxHeight=""560"" HorizontalAlignment=""Center"" VerticalAlignment=""Center"" Padding=""24"">
+            <Border x:Name=""InfoModal"" Background=""#E6000000"" Visibility=""Collapsed"" CornerRadius=""14"" Margin=""8"">
+                <Border Background=""#070F1E"" BorderBrush=""#00F2FE"" BorderThickness=""1.5"" CornerRadius=""14"" Width=""680"" MaxHeight=""560"" HorizontalAlignment=""Center"" VerticalAlignment=""Center"" Padding=""24"">
                     <StackPanel>
                         <Grid Margin=""0,0,0,14"">
                             <Grid.ColumnDefinitions><ColumnDefinition Width=""*""/><ColumnDefinition Width=""Auto""/></Grid.ColumnDefinitions>
-                            <TextBlock x:Name=""TxtModalTitle"" Grid.Column=""0"" Text=""Feature Specs"" FontSize=""15"" FontWeight=""ExtraBold"" Foreground=""{DynamicResource WinBorder}"" TextWrapping=""Wrap""/>
-                            <Button x:Name=""BtnCloseModal"" Grid.Column=""1"" Content=""✕"" Width=""28"" Height=""28"" Background=""Transparent"" Foreground=""{DynamicResource CloseFg}"" FontWeight=""Bold"" BorderThickness=""0"" Cursor=""Hand""/>
+                            <TextBlock x:Name=""TxtModalTitle"" Grid.Column=""0"" Text=""Feature Specs"" FontSize=""15"" FontWeight=""ExtraBold"" Foreground=""#00F2FE"" TextWrapping=""Wrap""/>
+                            <Button x:Name=""BtnCloseModal"" Grid.Column=""1"" Content=""✕"" Width=""28"" Height=""28"" Background=""Transparent"" Foreground=""#F87171"" FontWeight=""Bold"" BorderThickness=""0"" Cursor=""Hand""/>
                         </Grid>
                         <ScrollViewer MaxHeight=""420"" VerticalScrollBarVisibility=""Auto"">
                             <StackPanel>
-                                <TextBlock Text=""TECHNICAL DESCRIPTION:"" FontSize=""10"" FontWeight=""Bold"" Foreground=""{DynamicResource TextMuted}""/>
-                                <TextBlock x:Name=""TxtModalDesc"" Text=""Details..."" FontSize=""12"" Foreground=""{DynamicResource BodyFg}"" TextWrapping=""Wrap"" Margin=""0,4,0,12""/>
-                                <TextBlock Text=""AFFECTED PATHS / REGISTRY / RISK NOTES:"" FontSize=""10"" FontWeight=""Bold"" Foreground=""{DynamicResource TextMuted}""/>
-                                <Border Background=""{DynamicResource CodeBg}"" BorderBrush=""{DynamicResource CodeBorder}"" BorderThickness=""1"" CornerRadius=""8"" Padding=""10"" Margin=""0,4,0,14"">
-                                    <TextBlock x:Name=""TxtModalPaths"" Text=""Paths..."" FontFamily=""Consolas"" FontSize=""10.5"" Foreground=""{DynamicResource CodeFg}"" TextWrapping=""Wrap""/>
+                                <TextBlock Text=""TECHNICAL DESCRIPTION:"" FontSize=""10"" FontWeight=""Bold"" Foreground=""#64748B""/>
+                                <TextBlock x:Name=""TxtModalDesc"" Text=""Details..."" FontSize=""12"" Foreground=""#E2E8F0"" TextWrapping=""Wrap"" Margin=""0,4,0,12""/>
+                                <TextBlock Text=""AFFECTED PATHS / REGISTRY / RISK NOTES:"" FontSize=""10"" FontWeight=""Bold"" Foreground=""#64748B""/>
+                                <Border Background=""#020409"" BorderBrush=""#1E293B"" BorderThickness=""1"" CornerRadius=""8"" Padding=""10"" Margin=""0,4,0,14"">
+                                    <TextBlock x:Name=""TxtModalPaths"" Text=""Paths..."" FontFamily=""Consolas"" FontSize=""10.5"" Foreground=""#34D399"" TextWrapping=""Wrap""/>
                                 </Border>
                             </StackPanel>
                         </ScrollViewer>
@@ -3164,21 +2913,21 @@ namespace STEALTH
             </Border>
 
             <!-- PC NAME MODAL -->
-            <Border x:Name=""PcNameModal"" Background=""{DynamicResource ModalOverlay}"" Visibility=""Collapsed"" CornerRadius=""14"" Margin=""8"">
-                <Border Background=""{DynamicResource ModalPanelBg}"" BorderBrush=""#F59E0B"" BorderThickness=""1.5"" CornerRadius=""14"" Width=""580"" HorizontalAlignment=""Center"" VerticalAlignment=""Center"" Padding=""24"">
+            <Border x:Name=""PcNameModal"" Background=""#E6000000"" Visibility=""Collapsed"" CornerRadius=""14"" Margin=""8"">
+                <Border Background=""#070F1E"" BorderBrush=""#F59E0B"" BorderThickness=""1.5"" CornerRadius=""14"" Width=""580"" HorizontalAlignment=""Center"" VerticalAlignment=""Center"" Padding=""24"">
                     <StackPanel>
                         <Grid Margin=""0,0,0,14"">
                             <Grid.ColumnDefinitions><ColumnDefinition Width=""*""/><ColumnDefinition Width=""Auto""/></Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column=""0"" Text=""👑 Custom PC &amp; Host Identity Spoofer"" FontSize=""15"" FontWeight=""ExtraBold"" Foreground=""{DynamicResource GoldTagFg}""/>
-                            <Button x:Name=""BtnClosePcModal"" Grid.Column=""1"" Content=""✕"" Width=""28"" Height=""28"" Background=""Transparent"" Foreground=""{DynamicResource CloseFg}"" FontWeight=""Bold"" BorderThickness=""0"" Cursor=""Hand""/>
+                            <TextBlock Grid.Column=""0"" Text=""👑 Custom PC &amp; Host Identity Spoofer"" FontSize=""15"" FontWeight=""ExtraBold"" Foreground=""#FBBF24""/>
+                            <Button x:Name=""BtnClosePcModal"" Grid.Column=""1"" Content=""✕"" Width=""28"" Height=""28"" Background=""Transparent"" Foreground=""#F87171"" FontWeight=""Bold"" BorderThickness=""0"" Cursor=""Hand""/>
                         </Grid>
-                        <TextBlock Text=""Enter desired PC/Computer Name (or click Random Generator):"" FontSize=""11"" Foreground=""{DynamicResource TextSecondary}"" Margin=""0,0,0,8""/>
+                        <TextBlock Text=""Enter desired PC/Computer Name (or click Random Generator):"" FontSize=""11"" Foreground=""#94A3B8"" Margin=""0,0,0,8""/>
                         <Grid Margin=""0,0,0,14"">
                             <Grid.ColumnDefinitions><ColumnDefinition Width=""*""/><ColumnDefinition Width=""Auto""/></Grid.ColumnDefinitions>
                             <TextBox x:Name=""TxtNewPcName"" Grid.Column=""0"" Height=""34"" FontFamily=""Consolas"" FontSize=""13"" FontWeight=""Bold"" VerticalContentAlignment=""Center"" Padding=""8,0""/>
                             <Button x:Name=""BtnRandomPcName"" Grid.Column=""1"" Content=""🎲 Randomize"" Height=""34"" Margin=""8,0,0,0"" Style=""{StaticResource ActionBtn}""/>
                         </Grid>
-                        <TextBlock Text=""System Rename changes the NetBIOS computer name (effective after reboot). Virtual Identity only rewrites RegisteredOwner/Organization metadata."" FontSize=""10.5"" Foreground=""{DynamicResource TextMuted}"" TextWrapping=""Wrap"" Margin=""0,0,0,14""/>
+                        <TextBlock Text=""System Rename changes the NetBIOS computer name (effective after reboot). Virtual Identity only rewrites RegisteredOwner/Organization metadata."" FontSize=""10.5"" Foreground=""#64748B"" TextWrapping=""Wrap"" Margin=""0,0,0,14""/>
                         <StackPanel Orientation=""Horizontal"" HorizontalAlignment=""Right"">
                             <Button x:Name=""BtnApplyVirtualIdentity"" Content=""⚡ Apply Virtual Identity"" Height=""34"" Margin=""0,0,8,0"" Style=""{StaticResource ActionBtn}""/>
                             <Button x:Name=""BtnApplyPcName"" Content=""👑 Apply System Rename"" Height=""34"" Style=""{StaticResource CrownBtn}""/>
@@ -3188,17 +2937,17 @@ namespace STEALTH
             </Border>
 
             <!-- RESTORE MODAL -->
-            <Border x:Name=""RestoreModal"" Background=""{DynamicResource ModalOverlay}"" Visibility=""Collapsed"" CornerRadius=""14"" Margin=""8"">
-                <Border Background=""{DynamicResource ModalPanelBg}"" BorderBrush=""#34D399"" BorderThickness=""1.5"" CornerRadius=""14"" Width=""640"" MaxHeight=""520"" HorizontalAlignment=""Center"" VerticalAlignment=""Center"" Padding=""24"">
+            <Border x:Name=""RestoreModal"" Background=""#E6000000"" Visibility=""Collapsed"" CornerRadius=""14"" Margin=""8"">
+                <Border Background=""#070F1E"" BorderBrush=""#34D399"" BorderThickness=""1.5"" CornerRadius=""14"" Width=""640"" MaxHeight=""520"" HorizontalAlignment=""Center"" VerticalAlignment=""Center"" Padding=""24"">
                     <StackPanel>
                         <Grid Margin=""0,0,0,12"">
                             <Grid.ColumnDefinitions><ColumnDefinition Width=""*""/><ColumnDefinition Width=""Auto""/></Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column=""0"" Text=""↩ Restore a Backup Session"" FontSize=""15"" FontWeight=""ExtraBold"" Foreground=""{DynamicResource OkFg}""/>
-                            <Button x:Name=""BtnCloseRestore"" Grid.Column=""1"" Content=""✕"" Width=""28"" Height=""28"" Background=""Transparent"" Foreground=""{DynamicResource CloseFg}"" FontWeight=""Bold"" BorderThickness=""0"" Cursor=""Hand""/>
+                            <TextBlock Grid.Column=""0"" Text=""↩ Restore a Backup Session"" FontSize=""15"" FontWeight=""ExtraBold"" Foreground=""#34D399""/>
+                            <Button x:Name=""BtnCloseRestore"" Grid.Column=""1"" Content=""✕"" Width=""28"" Height=""28"" Background=""Transparent"" Foreground=""#F87171"" FontWeight=""Bold"" BorderThickness=""0"" Cursor=""Hand""/>
                         </Grid>
-                        <TextBlock Text=""Sessions contain .reg exports + quarantined files. Restore re-imports registry keys and moves files back."" FontSize=""10.5"" Foreground=""{DynamicResource TextSecondary}"" TextWrapping=""Wrap"" Margin=""0,0,0,8""/>
-                        <ListBox x:Name=""LstSessions"" Height=""220"" FontFamily=""Consolas"" FontSize=""11"" Margin=""0,0,0,8""/>
-                        <TextBlock x:Name=""TxtRestoreInfo"" Text=""No session selected."" FontSize=""10"" Foreground=""{DynamicResource TextMuted}"" Margin=""0,0,0,10""/>
+                        <TextBlock Text=""Sessions contain .reg exports + quarantined files. Restore re-imports registry keys and moves files back."" FontSize=""10.5"" Foreground=""#94A3B8"" TextWrapping=""Wrap"" Margin=""0,0,0,8""/>
+                        <ListBox x:Name=""LstSessions"" Height=""220"" Background=""#020409"" Foreground=""#34D399"" BorderBrush=""#1E293B"" FontFamily=""Consolas"" FontSize=""11"" Margin=""0,0,0,8""/>
+                        <TextBlock x:Name=""TxtRestoreInfo"" Text=""No session selected."" FontSize=""10"" Foreground=""#64748B"" Margin=""0,0,0,10""/>
                         <StackPanel Orientation=""Horizontal"" HorizontalAlignment=""Right"">
                             <Button x:Name=""BtnRefreshSessions"" Content=""⟳ Refresh"" Height=""32"" Margin=""0,0,8,0"" Style=""{StaticResource ActionBtn}""/>
                             <Button x:Name=""BtnOpenSessions"" Content=""📂 Open Folder"" Height=""32"" Margin=""0,0,8,0"" Style=""{StaticResource ActionBtn}""/>
@@ -3209,25 +2958,25 @@ namespace STEALTH
             </Border>
 
             <!-- SCHEDULE MODAL -->
-            <Border x:Name=""ScheduleModal"" Background=""{DynamicResource ModalOverlay}"" Visibility=""Collapsed"" CornerRadius=""14"" Margin=""8"">
-                <Border Background=""{DynamicResource ModalPanelBg}"" BorderBrush=""#38BDF8"" BorderThickness=""1.5"" CornerRadius=""14"" Width=""560"" HorizontalAlignment=""Center"" VerticalAlignment=""Center"" Padding=""24"">
+            <Border x:Name=""ScheduleModal"" Background=""#E6000000"" Visibility=""Collapsed"" CornerRadius=""14"" Margin=""8"">
+                <Border Background=""#070F1E"" BorderBrush=""#38BDF8"" BorderThickness=""1.5"" CornerRadius=""14"" Width=""560"" HorizontalAlignment=""Center"" VerticalAlignment=""Center"" Padding=""24"">
                     <StackPanel>
                         <Grid Margin=""0,0,0,12"">
                             <Grid.ColumnDefinitions><ColumnDefinition Width=""*""/><ColumnDefinition Width=""Auto""/></Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column=""0"" Text=""⏰ Automated Daily Sweep Scheduler"" FontSize=""15"" FontWeight=""ExtraBold"" Foreground=""{DynamicResource NetFg}""/>
-                            <Button x:Name=""BtnCloseSched"" Grid.Column=""1"" Content=""✕"" Width=""28"" Height=""28"" Background=""Transparent"" Foreground=""{DynamicResource CloseFg}"" FontWeight=""Bold"" BorderThickness=""0"" Cursor=""Hand""/>
+                            <TextBlock Grid.Column=""0"" Text=""⏰ Automated Daily Sweep Scheduler"" FontSize=""15"" FontWeight=""ExtraBold"" Foreground=""#38BDF8""/>
+                            <Button x:Name=""BtnCloseSched"" Grid.Column=""1"" Content=""✕"" Width=""28"" Height=""28"" Background=""Transparent"" Foreground=""#F87171"" FontWeight=""Bold"" BorderThickness=""0"" Cursor=""Hand""/>
                         </Grid>
-                        <TextBlock Text=""Registers a Windows Task Scheduler job (highest privileges) that runs the selected profile headless every day at HH:MM."" FontSize=""10.5"" Foreground=""{DynamicResource TextSecondary}"" TextWrapping=""Wrap"" Margin=""0,0,0,10""/>
+                        <TextBlock Text=""Registers a Windows Task Scheduler job (highest privileges) that runs the selected profile headless every day at HH:MM."" FontSize=""10.5"" Foreground=""#94A3B8"" TextWrapping=""Wrap"" Margin=""0,0,0,10""/>
                         <Grid Margin=""0,0,0,10"">
                             <Grid.ColumnDefinitions><ColumnDefinition Width=""Auto""/><ColumnDefinition Width=""*""/><ColumnDefinition Width=""Auto""/><ColumnDefinition Width=""*""/></Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column=""0"" Text=""Time:"" FontSize=""11"" Foreground=""{DynamicResource TextMuted}"" VerticalAlignment=""Center"" Margin=""0,0,6,0""/>
+                            <TextBlock Grid.Column=""0"" Text=""Time:"" FontSize=""11"" Foreground=""#64748B"" VerticalAlignment=""Center"" Margin=""0,0,6,0""/>
                             <TextBox x:Name=""TxtSchedTime"" Grid.Column=""1"" Height=""32"" Text=""03:00"" FontFamily=""Consolas"" VerticalContentAlignment=""Center"" Padding=""8,0""/>
-                            <TextBlock Grid.Column=""2"" Text=""Profile:"" FontSize=""11"" Foreground=""{DynamicResource TextMuted}"" VerticalAlignment=""Center"" Margin=""10,0,6,0""/>
+                            <TextBlock Grid.Column=""2"" Text=""Profile:"" FontSize=""11"" Foreground=""#64748B"" VerticalAlignment=""Center"" Margin=""10,0,6,0""/>
                             <ComboBox x:Name=""CmbSchedProfile"" Grid.Column=""3"" Height=""32"" SelectedIndex=""1"">
                                 <ComboBoxItem Content=""Safe""/><ComboBoxItem Content=""Balanced""/><ComboBoxItem Content=""Paranoid""/>
                             </ComboBox>
                         </Grid>
-                        <TextBlock x:Name=""TxtSchedStatus"" Text=""checking..."" FontSize=""10.5"" Foreground=""{DynamicResource OkFg}"" Margin=""0,0,0,12""/>
+                        <TextBlock x:Name=""TxtSchedStatus"" Text=""checking..."" FontSize=""10.5"" Foreground=""#34D399"" Margin=""0,0,0,12""/>
                         <StackPanel Orientation=""Horizontal"" HorizontalAlignment=""Right"">
                             <Button x:Name=""BtnSchedOn"" Content=""⏰ Register Daily Sweep"" Height=""32"" Margin=""0,0,8,0"" Style=""{StaticResource CrownBtn}""/>
                             <Button x:Name=""BtnSchedOff"" Content=""✖ Remove Task"" Height=""32"" Style=""{StaticResource ActionBtn}""/>
@@ -3237,15 +2986,15 @@ namespace STEALTH
             </Border>
 
             <!-- SHRED MODAL -->
-            <Border x:Name=""ShredModal"" Background=""{DynamicResource ModalOverlay}"" Visibility=""Collapsed"" CornerRadius=""14"" Margin=""8"">
-                <Border Background=""{DynamicResource ModalPanelBg}"" BorderBrush=""#F87171"" BorderThickness=""1.5"" CornerRadius=""14"" Width=""600"" HorizontalAlignment=""Center"" VerticalAlignment=""Center"" Padding=""24"">
+            <Border x:Name=""ShredModal"" Background=""#E6000000"" Visibility=""Collapsed"" CornerRadius=""14"" Margin=""8"">
+                <Border Background=""#070F1E"" BorderBrush=""#F87171"" BorderThickness=""1.5"" CornerRadius=""14"" Width=""600"" HorizontalAlignment=""Center"" VerticalAlignment=""Center"" Padding=""24"">
                     <StackPanel>
                         <Grid Margin=""0,0,0,12"">
                             <Grid.ColumnDefinitions><ColumnDefinition Width=""*""/><ColumnDefinition Width=""Auto""/></Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column=""0"" Text=""🔥 Secure Shredder (3-pass overwrite)"" FontSize=""15"" FontWeight=""ExtraBold"" Foreground=""{DynamicResource CloseFg}""/>
-                            <Button x:Name=""BtnCloseShred"" Grid.Column=""1"" Content=""✕"" Width=""28"" Height=""28"" Background=""Transparent"" Foreground=""{DynamicResource CloseFg}"" FontWeight=""Bold"" BorderThickness=""0"" Cursor=""Hand""/>
+                            <TextBlock Grid.Column=""0"" Text=""🔥 Secure Shredder (3-pass overwrite)"" FontSize=""15"" FontWeight=""ExtraBold"" Foreground=""#F87171""/>
+                            <Button x:Name=""BtnCloseShred"" Grid.Column=""1"" Content=""✕"" Width=""28"" Height=""28"" Background=""Transparent"" Foreground=""#F87171"" FontWeight=""Bold"" BorderThickness=""0"" Cursor=""Hand""/>
                         </Grid>
-                        <TextBlock Text=""Paste a full file or folder path. Content is overwritten 3x (random / 0xFF / 0x00) then deleted. IRREVERSIBLE on HDD; best-effort on SSD (wear-leveling)."" FontSize=""10.5"" Foreground=""{DynamicResource TextSecondary}"" TextWrapping=""Wrap"" Margin=""0,0,0,10""/>
+                        <TextBlock Text=""Paste a full file or folder path. Content is overwritten 3x (random / 0xFF / 0x00) then deleted. IRREVERSIBLE on HDD; best-effort on SSD (wear-leveling)."" FontSize=""10.5"" Foreground=""#94A3B8"" TextWrapping=""Wrap"" Margin=""0,0,0,10""/>
                         <TextBox x:Name=""TxtShredPath"" Height=""34"" FontFamily=""Consolas"" FontSize=""12"" VerticalContentAlignment=""Center"" Padding=""8,0"" Margin=""0,0,0,14""/>
                         <StackPanel Orientation=""Horizontal"" HorizontalAlignment=""Right"">
                             <Button x:Name=""BtnDoShredFile"" Content=""🔥 Shred FILE"" Height=""32"" Margin=""0,0,8,0"" Style=""{StaticResource ActionBtn}""/>
@@ -3283,7 +3032,6 @@ namespace STEALTH
             btnDry = (Button)LogicalTreeHelper.FindLogicalNode(root, "BtnDry");
             btnBackup = (Button)LogicalTreeHelper.FindLogicalNode(root, "BtnBackup");
             btnQuarantine = (Button)LogicalTreeHelper.FindLogicalNode(root, "BtnQuarantine");
-            btnTheme = (Button)LogicalTreeHelper.FindLogicalNode(root, "BtnTheme");
             btnMaster = (Button)LogicalTreeHelper.FindLogicalNode(root, "BtnMasterRun");
 
             infoModal = (Border)LogicalTreeHelper.FindLogicalNode(root, "InfoModal");
@@ -3363,7 +3111,7 @@ namespace STEALTH
             {
                 Kernel.DryRun = !Kernel.DryRun;
                 btnDry.Content = Kernel.DryRun ? "\u25CF DRY-RUN: ON" : "\u25CB DRY-RUN: OFF";
-                btnDry.Foreground = (Brush)this.FindResource(Kernel.DryRun ? "WarnFg" : "ToolBtnFg");
+                btnDry.Foreground = new SolidColorBrush(Kernel.DryRun ? Color.FromRgb(0xFB, 0xBF, 0x24) : Color.FromRgb(0x7D, 0xD3, 0xFC));
                 AppendLog(Kernel.DryRun ? "[MODE] DRY-RUN enabled — nothing will be modified, every planned op is previewed." : "[MODE] DRY-RUN disabled — live execution.");
             };
             btnBackup.Click += delegate
@@ -3378,16 +3126,6 @@ namespace STEALTH
                 btnQuarantine.Content = Kernel.QuarantineOn ? "\uD83D\uDCE6 QUARANTINE: ON" : "\uD83D\uDCE6 QUARANTINE: OFF";
                 AppendLog("[MODE] file quarantine " + (Kernel.QuarantineOn ? "ENABLED (files moved to quarantine, restorable)" : "DISABLED (files hard-deleted, sizes recorded in manifest)"));
             };
-            btnTheme.Click += delegate
-            {
-                ThemeManager.SetMode(ThemeManager.NextMode());
-                AppendLog("[THEME] mode=" + ThemeManager.Mode + " resolved=" + ThemeManager.Resolved + " (choice saved automatically)");
-            };
-            ThemeManager.Changed += delegate
-            {
-                try { Dispatcher.Invoke((Action)(delegate { UpdateThemeButton(); })); } catch { }
-            };
-            UpdateThemeButton();
             btnMaster.Click += delegate
             {
                 int idx = cmbProfile.SelectedIndex;
@@ -3555,14 +3293,6 @@ namespace STEALTH
             ResetCounters();
         }
 
-        private void UpdateThemeButton()
-        {
-            if (btnTheme == null) return;
-            btnTheme.Content = ThemeManager.Mode == "System"
-                ? "◐ THEME: SYSTEM (" + ThemeManager.Resolved.ToLower() + ")"
-                : "◐ THEME: " + ThemeManager.Mode.ToUpper();
-        }
-
         private void ToggleMaximize()
         {
             // borderless windows have no chrome-aware maximize, so fake it against the work
@@ -3655,7 +3385,9 @@ namespace STEALTH
             Dispatcher.Invoke((Action)(delegate
             {
                 txtOk.Text = "OK:" + okCount + "  FAIL:" + failCount + "  SKIP:" + skipCount;
-                txtOk.Foreground = (Brush)Application.Current.Resources[failCount > 0 ? "CloseFg" : (okCount > 0 ? "OkFg" : "TextMuted")];
+                txtOk.Foreground = new SolidColorBrush(
+                    failCount > 0 ? Color.FromRgb(0xF8, 0x71, 0x71) :
+                    okCount > 0 ? Color.FromRgb(0x34, 0xD3, 0x99) : Color.FromRgb(0x64, 0x74, 0x8B));
             }));
         }
 
@@ -3852,7 +3584,7 @@ namespace STEALTH
                             txtHost.Text = host;
                             txtNet.Text = net;
                             txtTelem.Text = silenced ? "0-Track Silenced" : "Active (" + telem + ")";
-                            txtTelem.Foreground = (Brush)Application.Current.Resources[silenced ? "OkFg" : "CloseFg"];
+                            txtTelem.Foreground = new SolidColorBrush(silenced ? Color.FromRgb(0x34, 0xD3, 0x99) : Color.FromRgb(0xF8, 0x71, 0x71));
                             txtRam.Text = (ram.Length > 0 ? ram : "?") + "% RAM";
                         }));
                     }
