@@ -2455,6 +2455,79 @@ namespace STEALTH
     // them on Application.Current.Resources so every control re-styles instantly.
     // ======================================================================================
 
+    // ======================================================================================
+    // IDENT FORMATS — rotating machine-identity display formats for the HUD.
+    // Cycles through every common identity notation (Windows, SSH, whoami, domain, IP,
+    // terminal-prompt, syslog, mDNS...) so the HUD shows a different style each tick.
+    // ======================================================================================
+
+    public static class IdentFormats
+    {
+        private static int _idx;
+
+        private static string LocalIPv4()
+        {
+            try
+            {
+                System.Net.NetworkInformation.NetworkInterface[] nis = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces();
+                foreach (System.Net.NetworkInformation.NetworkInterface ni in nis)
+                {
+                    if (ni.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up) continue;
+                    if (ni.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Loopback) continue;
+                    foreach (System.Net.NetworkInformation.UnicastIPAddressInformation ua in ni.GetIPProperties().UnicastAddresses)
+                    {
+                        if (ua.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && !System.Net.IPAddress.IsLoopback(ua.Address))
+                            return ua.Address.ToString();
+                    }
+                }
+            }
+            catch { }
+            return "0.0.0.0";
+        }
+
+        /// <summary>All supported identity notations for this machine/user pair.</summary>
+        public static List<string> GetAll()
+        {
+            string host = Environment.MachineName;
+            string user = Environment.UserName;
+            string dom = Environment.UserDomainName;
+            string ip = LocalIPv4();
+            string hl = host.ToLowerInvariant();
+            string ul = user.ToLowerInvariant();
+            List<string> l = new List<string>();
+            l.Add(host + " (" + user + ")");            // 1. Windows display style: HOST (user)
+            l.Add(user + "@" + host);                   // 2. SSH / Linux login: user@HOST
+            l.Add(host + "\\" + user);                  // 3. whoami / Windows logon: HOST\user
+            l.Add(dom + "\\" + user);                   // 4. Domain logon: DOMAIN\user
+            l.Add(ul + "@" + hl);                       // 5. Bash prompt base: user@host (lowercase)
+            l.Add(ul + "@" + ip);                       // 6. Network identity: user@IPv4
+            l.Add(ul + "@" + host + ":~$");             // 7. Terminal prompt style: user@HOST:~$
+            l.Add(host + "/" + user);                   // 8. Path style: HOST/user
+            l.Add(user + " \u2022 " + host);            // 9. Display bullet style: user \u2022 HOST
+            l.Add(user.ToUpperInvariant() + "@" + host);// 10. Uppercase sysadmin: USER@HOST
+            l.Add(hl + ".local (" + ul + ")");          // 11. mDNS/FQDN style: host.local (user)
+            l.Add("[" + user + "] " + host);            // 12. Syslog tag style: [user] HOST
+            l.Add(host + ":" + user);                   // 13. Colon pair: HOST:user
+            l.Add(user + "@" + dom);                    // 14. UPN-ish: user@domain
+            // workgroup machines have UserDomainName == MachineName, which collapses a few
+            // notations into duplicates — keep first occurrence only, preserve order
+            List<string> uniq = new List<string>();
+            HashSet<string> seen = new HashSet<string>();
+            foreach (string x in l) if (seen.Add(x)) uniq.Add(x);
+            return uniq;
+        }
+
+        /// <summary>Next format in rotation (auto-cycles forever).</summary>
+        public static string Next()
+        {
+            List<string> all = GetAll();
+            if (all.Count == 0) return Environment.MachineName;
+            string v = all[_idx % all.Count];
+            _idx = (_idx + 1) % all.Count;
+            return v;
+        }
+    }
+
     public static class ThemeManager
     {
         public static readonly string[] Modes = new string[] { "Dark", "Light", "System" };
@@ -3839,7 +3912,7 @@ namespace STEALTH
                 {
                     try
                     {
-                        string host = Environment.MachineName + " (" + Environment.UserName + ")";
+                        string host = IdentFormats.Next(); // rotates through all identity notations
                         ProcResult r = Kernel.PS("$n=(Get-NetAdapter | Where-Object { $_.Status -eq 'Up' } | Select-Object -First 2 -ExpandProperty Name) -join ', '; $t=(Get-Service -Name DiagTrack -ErrorAction SilentlyContinue).Status; $os=Get-CimInstance Win32_OperatingSystem; $m=[math]::Round(($os.TotalVisibleMemorySize-$os.FreePhysicalMemory)/$os.TotalVisibleMemorySize*100,1); Write-Output (\"{0}|{1}|{2}\" -f $n,$t,$m)", 12000);
                         string[] parts = (r.Out ?? "").Trim().Split('|');
                         string net = parts.Length > 0 ? parts[0].Trim() : "";

@@ -324,6 +324,21 @@ namespace STEALTH
                 if (ThemeManager.Mode != original) throw new Exception("mode persistence broken");
             });
 
+            // Test 17: rotating identity formats — complete set, unique, non-empty
+            AssertTest("17. IdentFormats: rotating identity notations (host/user/domain/IP styles)", delegate()
+            {
+                List<string> fmts = IdentFormats.GetAll();
+                if (fmts.Count < 10) throw new Exception("expected >=10 unique formats, got " + fmts.Count);
+                foreach (string f in fmts) if (string.IsNullOrWhiteSpace(f)) throw new Exception("empty format present");
+                HashSet<string> uniq = new HashSet<string>(fmts);
+                if (uniq.Count != fmts.Count) throw new Exception("duplicate formats present");
+                if (!fmts[0].Contains(Environment.MachineName)) throw new Exception("format 0 missing machine name");
+                string a1 = IdentFormats.Next();
+                string a2 = IdentFormats.Next();
+                if (a1 == a2) throw new Exception("rotation not advancing");
+                Console.Write("(" + fmts.Count + " formats) ");
+            });
+
             // cleanup
             try
             {
