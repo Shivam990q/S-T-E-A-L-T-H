@@ -55,7 +55,7 @@ namespace STEALTH
         {
             Console.ForegroundColor = ConsoleColor.Cyan;
             Console.WriteLine("===================================================================");
-            Console.WriteLine(" S-T-E-A-L-T-H v8.0 - 46-VECTOR SANDBOX-SAFE TEST RUNNER");
+            Console.WriteLine(" S-T-E-A-L-T-H v8.1 - 53-VECTOR SANDBOX-SAFE TEST RUNNER");
             Console.WriteLine(" (no system damage: dry-run + self-cleaning sandbox keys/files)");
             Console.WriteLine("===================================================================");
             Console.ResetColor();
@@ -79,7 +79,7 @@ namespace STEALTH
             AssertTest("2. Action Registry: 46 Categories, Unique Nums, All Actions Runnable", delegate()
             {
                 List<Category> cats = ActionRegistry.Build();
-                if (cats.Count != 46) throw new Exception("expected 46 categories, got " + cats.Count);
+                if (cats.Count != 53) throw new Exception("expected 53 categories, got " + cats.Count);
                 HashSet<string> seenNums = new HashSet<string>();
                 foreach (Category c in cats)
                 {
@@ -245,7 +245,7 @@ namespace STEALTH
                 var root = (UIElement)window.Content;
                 string[] required = new string[] {
                     "TitleBar","BtnClose","BtnMin","BtnMax","BtnMasterRun","BtnAudit","BtnRestore","BtnSchedule","BtnShred","BtnPcName",
-                    "CmbProfile","BtnDry","BtnBackup","BtnQuarantine","BtnTheme","TxtSearch",
+                    "CmbProfile","BtnDry","BtnBackup","BtnQuarantine","BtnTheme","BtnCancel","BtnMenu","MenuModal","BtnCloseMenu","BtnThemeDark","BtnThemeLight","BtnMenuDry","BtnMenuBackup","BtnMenuQuar","BtnMenuBackups","BtnMenuAudit","BtnMenuCliHelp","BtnMenuAbout","TxtSearch",
                     "TxtHost","TxtNet","TxtTelem","TxtRam","TxtStats","TxtLogs","Scroller","PrgBar",
                     "InfoModal","TxtModalTitle","TxtModalDesc","TxtModalPaths","BtnCloseModal","BtnModalGotIt",
                     "PcNameModal","TxtNewPcName","BtnApplyPcName","BtnRandomPcName","BtnClosePcModal","BtnApplyVirtualIdentity",
@@ -260,7 +260,7 @@ namespace STEALTH
                 }
                 int cards = 0;
                 foreach (var fe in FindAll(root, delegate(string n) { return n != null && n.StartsWith("Card_"); })) cards++;
-                if (cards != 46) throw new Exception("expected 46 cards, found " + cards);
+                if (cards != 53) throw new Exception("expected 53 cards, found " + cards);
             });
 
             // Test 14: dry-run guards actually block mutations
@@ -358,6 +358,41 @@ namespace STEALTH
                     if (ob.CornerRadius.TopLeft != 14) throw new Exception("restore: radius not 14");
                 }
                 finally { if (window.Width > wa.Width) window.ToggleMaximize(); }
+            });
+
+            // Test 19: settings INI persists dry-run/backup/quarantine toggles
+            AssertTest("19. AppSettings: INI persistence roundtrip for toggles", delegate()
+            {
+                bool od = Kernel.DryRun, ob = Kernel.BackupOn, oq = Kernel.QuarantineOn;
+                Kernel.DryRun = true; Kernel.BackupOn = false; Kernel.QuarantineOn = true;
+                AppSettings.Save();
+                Kernel.DryRun = false; Kernel.BackupOn = true; Kernel.QuarantineOn = false;
+                AppSettings.Load();
+                if (!Kernel.DryRun || Kernel.BackupOn || !Kernel.QuarantineOn) throw new Exception("roundtrip mismatch: dry=" + Kernel.DryRun + " backup=" + Kernel.BackupOn + " quar=" + Kernel.QuarantineOn);
+                Kernel.DryRun = od; Kernel.BackupOn = ob; Kernel.QuarantineOn = oq;
+                AppSettings.Save();
+            });
+
+            // Test 20: CLI /help and /list via child process
+            AssertTest("20. CLI: /help and /list produce full action catalog", delegate()
+            {
+                string exe = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "S-T-E-A-L-T-H.exe");
+                ProcessStartInfo psi = new ProcessStartInfo();
+                psi.FileName = exe; psi.Arguments = "/help"; psi.UseShellExecute = false; psi.RedirectStandardOutput = true; psi.CreateNoWindow = true;
+                using (Process p1 = Process.Start(psi))
+                {
+                    string o1 = p1.StandardOutput.ReadToEnd();
+                    if (!p1.WaitForExit(30000)) throw new Exception("/help timed out");
+                    if (!o1.Contains("/sweep") || !o1.Contains("/run")) throw new Exception("/help output incomplete");
+                }
+                psi.Arguments = "/list";
+                using (Process p2 = Process.Start(psi))
+                {
+                    string o2 = p2.StandardOutput.ReadToEnd();
+                    if (!p2.WaitForExit(60000)) throw new Exception("/list timed out");
+                    if (!o2.Contains("TOTAL:") || !o2.Contains("53 vectors")) throw new Exception("/list catalog wrong");
+                    if (!o2.Contains("45.") || !o2.Contains("51.")) throw new Exception("/list missing new vectors");
+                }
             });
 
             // cleanup

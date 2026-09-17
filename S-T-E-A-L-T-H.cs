@@ -315,6 +315,7 @@ namespace STEALTH
         public static Action<string> Log = delegate(string s) { };
         public static BackupManager Backup;             // active session (null = no backups)
         public static bool DryRun;
+        public static bool CancelRequested;
         public static bool QuarantineOn = true;         // move files to quarantine instead of delete
         public static bool BackupOn = true;
         public static bool? _adminCache;
@@ -805,7 +806,7 @@ namespace STEALTH
             h.Append("td,th{border:1px solid #1E293B;padding:5px 9px;font-size:12px;text-align:left;}");
             h.Append("th{background:#08101E;color:#38BDF8;}.bad{color:#F87171}.good{color:#34D399}.warn{color:#FBBF24}");
             h.Append("</style></head><body>");
-            h.Append("<h1>S-T-E-A-L-T-H v8.0 — Privacy & Forensic Audit Report</h1>");
+            h.Append("<h1>S-T-E-A-L-T-H v8.1 ADVANCED — Privacy & Forensic Audit Report</h1>");
             h.Append("<p>Host: ").Append(Esc(Environment.MachineName)).Append(" | User: ").Append(Esc(Environment.UserName));
             h.Append(" | Generated: ").Append(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
             h.Append(" | Elevated: ").Append(Kernel.IsAdmin() ? "<span class='good'>YES</span>" : "<span class='warn'>NO (results may be incomplete)</span>").Append("</p>");
@@ -2184,6 +2185,343 @@ namespace STEALTH
             }, "Legacy DataCollection AllowTelemetry=0"));
             cats.Add(c);
 
+            // ==================================================================================
+            // CAT 45 (NEW v8.1) — Network Hardening Pro
+            // Verified: NetbiosOptions=2 (NetBT\Interfaces\Tcpip_*), EnableMDNS=0 (Dnscache),
+            // SMB1=0, requiresecuritysignature=1, LmCompatibilityLevel=5, RestrictSendingNTLMTraffic
+            // ==================================================================================
+            c = new Category();
+            c.Num = "45"; c.Tag = "NET HARDENING PRO";
+            c.Title = "Protocol-Level Network Hardening (NetBIOS/mDNS/SMB/NTLM)";
+            c.Desc = "NEW v8.1: NetBIOS off, mDNS off, SMBv1 off, SMB signing required, NTLMv2-only.";
+            c.Info = "Enterprise-grade protocol hardening. NetBIOS-over-TCP/IP and mDNS leak host names on LANs and are classic relay/ poisoning targets. NTLMv2-only + SMB signing mitigates relay attacks (PetitPotam-style). CAUTION: legacy NAS/printers/appliances using NTLMv1 or unsigned SMB will stop working.";
+            c.InfoPaths = "HKLM\\SYSTEM\\CurrentControlSet\\Services\\NetBT\\Parameters\\Interfaces\\Tcpip_* -> NetbiosOptions=2\nHKLM\\SYSTEM\\CurrentControlSet\\Services\\Dnscache\\Parameters -> EnableMDNS=0\nHKLM\\...\\LanmanServer\\Parameters -> SMB1=0\nHKLM\\...\\{LanmanServer,LanmanWorkstation}\\Parameters -> requiresecuritysignature=1\nHKLM\\SYSTEM\\CurrentControlSet\\Control\\Lsa -> LmCompatibilityLevel=5\nHKLM\\...\\Lsa\\MSV1_0 -> RestrictSendingNTLMTraffic=2";
+            c.Actions.Add(A("45.1", "Disable NetBIOS over TCP/IP (all adapters)", RiskLevel.Balanced, false, true, delegate(bool dry)
+            {
+                if (Kernel.DryRun) { Kernel.Log("[DRY] NetbiosOptions=2 on every Tcpip_* interface"); return OpResult.OK("preview"); }
+                return Kernel.PSCheck("Get-ChildItem 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\NetBT\\Parameters\\Interfaces' -ErrorAction SilentlyContinue | ForEach-Object { Set-ItemProperty -Path $_.PSPath -Name NetbiosOptions -Value 2 -Type DWord -Force -ErrorAction SilentlyContinue }; 'netbios-disabled'", "NetBIOS disable", 30000);
+            }, "NetbiosOptions=2 per interface (verify: ipconfig /all -> 'NetBIOS over Tcpip: Disabled')"));
+            c.Actions.Add(A("45.2", "Disable mDNS resolution", RiskLevel.Safe, delegate(bool dry)
+            {
+                return Kernel.RegSet("HKLM\\SYSTEM\\CurrentControlSet\\Services\\Dnscache\\Parameters", "EnableMDNS", 0, RegistryValueKind.DWord);
+            }, "EnableMDNS=0 (multicast DNS probing off)"));
+            c.Actions.Add(A("45.3", "Disable SMBv1 server", RiskLevel.Balanced, false, true, delegate(bool dry)
+            {
+                OpResult r1 = Kernel.RegSet("HKLM\\SYSTEM\\CurrentControlSet\\Services\\LanmanServer\\Parameters", "SMB1", 0, RegistryValueKind.DWord);
+                Kernel.RegSet("HKLM\\SYSTEM\\CurrentControlSet\\Services\\LanmanWorkstation\\Parameters", "SMB1", 0, RegistryValueKind.DWord);
+                return r1;
+            }, "SMB1=0 (WannaCry-era protocol; legacy shares may break)"));
+            c.Actions.Add(A("45.4", "Require SMB signing (client+server)", RiskLevel.Balanced, delegate(bool dry)
+            {
+                OpResult r1 = Kernel.RegSet("HKLM\\SYSTEM\\CurrentControlSet\\Services\\LanmanServer\\Parameters", "requiresecuritysignature", 1, RegistryValueKind.DWord);
+                Kernel.RegSet("HKLM\\SYSTEM\\CurrentControlSet\\Services\\LanmanServer\\Parameters", "enablesecuritysignature", 1, RegistryValueKind.DWord);
+                Kernel.RegSet("HKLM\\SYSTEM\\CurrentControlSet\\Services\\LanmanWorkstation\\Parameters", "requiresecuritysignature", 1, RegistryValueKind.DWord);
+                Kernel.RegSet("HKLM\\SYSTEM\\CurrentControlSet\\Services\\LanmanWorkstation\\Parameters", "enablesecuritysignature", 1, RegistryValueKind.DWord);
+                return r1;
+            }, "requiresecuritysignature=1 both sides (anti-relay; unsigned appliances break)"));
+            c.Actions.Add(A("45.5", "NTLMv2 only (refuse LM & NTLMv1)", RiskLevel.Balanced, false, true, delegate(bool dry)
+            {
+                return Kernel.RegSet("HKLM\\SYSTEM\\CurrentControlSet\\Control\\Lsa", "LmCompatibilityLevel", 5, RegistryValueKind.DWord);
+            }, "LmCompatibilityLevel=5 (legacy XP/2000-era auth fails)"));
+            c.Actions.Add(A("45.6", "Deny ALL outgoing NTLM (paranoid)", RiskLevel.Paranoid, false, true, delegate(bool dry)
+            {
+                return Kernel.RegSet("HKLM\\SYSTEM\\CurrentControlSet\\Control\\Lsa\\MSV1_0", "RestrictSendingNTLMTraffic", 2, RegistryValueKind.DWord);
+            }, "RestrictSendingNTLMTraffic=2 (domain/legacy resource access may fail; audit with 1 first if unsure)"));
+            cats.Add(c);
+
+            // ==================================================================================
+            // CAT 46 (NEW v8.1) — Credential & Vault Hygiene
+            // Verified: cmdkey /list | parse Target: | cmdkey /delete pattern
+            // ==================================================================================
+            c = new Category();
+            c.Num = "46"; c.Tag = "CREDENTIAL VAULT";
+            c.Title = "Windows Credential Manager & Sync Hygiene";
+            c.Desc = "NEW v8.1: enumerate/delete stored credentials, wipe credential files, cloud-sync off.";
+            c.Info = "Windows stores server logons, certificates and app tokens in Credential Manager. Listing is read-only; deletion is destructive (you re-enter saved logons). Domain cached logons (LSA) are NOT touched by cmdkey.";
+            c.InfoPaths = "cmdkey /list -> cmdkey /delete:<target>\n%LOCALAPPDATA%\\Microsoft\\Credentials\\*\n%APPDATA%\\Microsoft\\{Credentials,Vault}\\*\nHKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\SettingSync -> DisableSettingSync=2";
+            c.Actions.Add(A("46.1", "List stored credentials (read-only audit)", RiskLevel.Safe, delegate(bool dry)
+            {
+                if (Kernel.DryRun) { Kernel.Log("[DRY] cmdkey /list"); return OpResult.OK("preview"); }
+                ProcResult r = ProcRunner.Run("cmdkey.exe", "/list", 20000);
+                string[] lines = (r.Out ?? "").Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                int shown = 0;
+                foreach (string ln in lines)
+                {
+                    string t = ln.Trim();
+                    if (t.StartsWith("Target:", StringComparison.OrdinalIgnoreCase) || t.StartsWith("目标:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (shown < 25) Kernel.Log("[CRED] " + t);
+                        shown++;
+                    }
+                }
+                return OpResult.OK(shown + " stored credential(s) found (first 25 logged)");
+            }, "cmdkey /list (read-only)"));
+            c.Actions.Add(A("46.2", "Delete ALL stored credentials", RiskLevel.Paranoid, true, false, delegate(bool dry)
+            {
+                if (Kernel.DryRun) { Kernel.Log("[DRY] delete every cmdkey credential"); return OpResult.OK("preview"); }
+                ProcResult r = ProcRunner.Run("cmdkey.exe", "/list", 20000);
+                string[] lines = (r.Out ?? "").Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                int deleted = 0;
+                foreach (string ln in lines)
+                {
+                    string t = ln.Trim();
+                    if (t.StartsWith("Target:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string target = t.Substring(7).Trim();
+                        if (target.Length == 0) continue;
+                        ProcResult d = ProcRunner.Run("cmdkey.exe", "/delete:" + target, 10000);
+                        if (d.Code == 0) deleted++;
+                    }
+                }
+                return OpResult.OK(deleted + " credential(s) deleted");
+            }, "ALL Credential Manager entries (saved logons lost; re-enter on next use)"));
+            c.Actions.Add(A("46.3", "Shred credential/vault files", RiskLevel.Paranoid, true, false, delegate(bool dry)
+            {
+                OpResult r1 = Kernel.DirWipe(LA() + "\\Microsoft\\Credentials");
+                Kernel.DirWipe(AP() + "\\Microsoft\\Credentials");
+                Kernel.DirWipe(AP() + "\\Microsoft\\Vault");
+                Kernel.DirWipe(LA() + "\\Microsoft\\Vault");
+                return r1;
+            }, "Credentials + Vault stores (DPAPI-backed logons lost)"));
+            c.Actions.Add(A("46.4", "Disable Windows settings cloud sync", RiskLevel.Safe, delegate(bool dry)
+            {
+                OpResult r1 = Kernel.RegSet("HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\SettingSync", "DisableSettingSync", 2, RegistryValueKind.DWord);
+                Kernel.RegSet("HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\SettingSync", "DisableSettingSyncUserOverride", 1, RegistryValueKind.DWord);
+                return r1;
+            }, "SettingSync off (stops theme/password/browser-setting cloud sync)"));
+            cats.Add(c);
+
+            // ==================================================================================
+            // CAT 47 (NEW v8.1) — Persistence Audit & Hygiene (defensive, MITRE T1546.003)
+            // Verified: root\subscription FilterToConsumerBinding -> EventConsumer -> EventFilter
+            // ==================================================================================
+            c = new Category();
+            c.Num = "47"; c.Tag = "PERSISTENCE AUDIT";
+            c.Title = "Persistence Audit & WMI Subscription Hygiene";
+            c.Desc = "NEW v8.1: WMI event-subscription cleanup (T1546.003), BITS reset, Run-keys/tasks audit.";
+            c.Info = "DEFENSIVE tooling: WMI permanent subscriptions (Filter+Consumer+Binding) are a top malware persistence vector — this removes ALL of them (some legitimate management agents use them; they would need re-creation). BITS queue can hide stealth downloads. The audits are read-only and list Run keys, non-Microsoft scheduled tasks and Active Setup stubs.";
+            c.InfoPaths = "root\\subscription: __FilterToConsumerBinding, __EventConsumer, __EventFilter (deleted in order)\nbitsadmin /reset /allusers\nHKLM/HKCU ...\\CurrentVersion\\Run{,Once} (listing)\nGet-ScheduledTask (non-\\Microsoft listing)\nHKLM\\...\\Active Setup\\Installed Components (listing)";
+            c.Actions.Add(A("47.1", "Remove ALL WMI event subscriptions", RiskLevel.Balanced, delegate(bool dry)
+            {
+                if (Kernel.DryRun) { Kernel.Log("[DRY] delete root\\subscription bindings->consumers->filters"); return OpResult.OK("preview"); }
+                return Kernel.PSCheck("$b=Get-CimInstance -Namespace root\\subscription -ClassName __FilterToConsumerBinding -EA SilentlyContinue; $b | Remove-CimInstance -EA SilentlyContinue; $c=Get-CimInstance -Namespace root\\subscription -ClassName __EventConsumer -EA SilentlyContinue; $c | Remove-CimInstance -EA SilentlyContinue; $f=Get-CimInstance -Namespace root\\subscription -ClassName __EventFilter -EA SilentlyContinue; $f | Remove-CimInstance -EA SilentlyContinue; Write-Output ('bindings=' + @($b).Count + ' consumers=' + @($c).Count + ' filters=' + @($f).Count)", "WMI subscriptions", 60000);
+            }, "root\\subscription wiped (legit management agents would need re-creation)"));
+            c.Actions.Add(A("47.2", "Reset BITS transfer queue", RiskLevel.Safe, delegate(bool dry)
+            {
+                return Kernel.Tool("bitsadmin.exe", "/reset /allusers", "BITS queue", 30000);
+            }, "bitsadmin /reset /allusers (cancels hidden/background transfer jobs)"));
+            c.Actions.Add(A("47.3", "Audit Run/RunOnce keys (read-only)", RiskLevel.Safe, delegate(bool dry)
+            {
+                if (Kernel.DryRun) { Kernel.Log("[DRY] Run/RunOnce listing"); return OpResult.OK("preview"); }
+                ProcResult r = Kernel.PS("$p='HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run','HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce','HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run','HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce'; foreach($k in $p){ if(Test-Path $k){ $i=Get-Item $k; foreach($v in $i.GetValueNames()){ Write-Output ($k.Split('\\')[0] + ' :: ' + $v + ' = ' + $i.GetValue($v)) } } }", 30000);
+                string[] lines = (r.Out ?? "").Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                foreach (string ln in lines) Kernel.Log("[RUN] " + ln.Trim());
+                return OpResult.OK(lines.Length + " autostart entr(ies) listed above");
+            }, "Run/RunOnce HKLM+HKCU listing"));
+            c.Actions.Add(A("47.4", "Audit non-Microsoft scheduled tasks (read-only)", RiskLevel.Safe, delegate(bool dry)
+            {
+                if (Kernel.DryRun) { Kernel.Log("[DRY] non-MS task listing"); return OpResult.OK("preview"); }
+                ProcResult r = Kernel.PS("Get-ScheduledTask -EA SilentlyContinue | Where-Object { $_.TaskPath -notlike '\\Microsoft\\*' } | ForEach-Object { Write-Output ($_.TaskPath + $_.TaskName + ' [' + $_.State + ']') }", 30000);
+                string[] lines = (r.Out ?? "").Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                foreach (string ln in lines) Kernel.Log("[TASK] " + ln.Trim());
+                return OpResult.OK(lines.Length + " non-Microsoft task(s) listed above");
+            }, "All tasks outside \\Microsoft\\ tree"));
+            c.Actions.Add(A("47.5", "Audit Active Setup stubs (read-only)", RiskLevel.Safe, delegate(bool dry)
+            {
+                if (Kernel.DryRun) { Kernel.Log("[DRY] Active Setup listing"); return OpResult.OK("preview"); }
+                ProcResult r = Kernel.PS("foreach($root in 'HKLM:\\SOFTWARE\\Microsoft\\Active Setup\\Installed Components','HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Active Setup\\Installed Components'){ if(Test-Path $root){ Get-ChildItem $root -EA SilentlyContinue | ForEach-Object { $n=(Get-ItemProperty $_.PSPath -EA SilentlyContinue).'(default)'; if(-not $n){$n=$_.PSChildName}; Write-Output ($n + ' :: ' + $_.PSChildName) } } }", 30000);
+                string[] lines = (r.Out ?? "").Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                foreach (string ln in lines) Kernel.Log("[ASETUP] " + ln.Trim());
+                return OpResult.OK(lines.Length + " Active Setup component(s) listed above");
+            }, "Active Setup per-user launch stubs"));
+            cats.Add(c);
+
+            // ==================================================================================
+            // CAT 48 (NEW v8.1) — ADS Scanner (Alternate Data Streams)
+            // ==================================================================================
+            c = new Category();
+            c.Num = "48"; c.Tag = "ADS SCANNER";
+            c.Title = "NTFS Alternate Data Stream Scanner";
+            c.Desc = "NEW v8.1: scan Desktop/Documents/Downloads for hidden ADS; clear Mark-of-the-Web.";
+            c.Info = "ADS hide data inside files (classic staging/exfil trick). Scan is read-only and reports every stream beyond the default :$DATA. Zone.Identifier is the Mark-of-Web stream — removing it stops SmartScreen warnings but WEAKENS a security layer (files from internet no longer flagged).";
+            c.InfoPaths = "Get-Item <file> -Stream * (enumerate)\nGet-ChildItem ... | Unblock-File (removes Zone.Identifier)\n scanned: Desktop, Documents, Downloads, %TEMP%";
+            c.Actions.Add(A("48.1", "Scan profile folders for hidden ADS (read-only)", RiskLevel.Safe, delegate(bool dry)
+            {
+                if (Kernel.DryRun) { Kernel.Log("[DRY] ADS scan Desktop/Documents/Downloads/TEMP"); return OpResult.OK("preview"); }
+                ProcResult r = Kernel.PS("$dirs=@(\"$env:USERPROFILE\\Desktop\",\"$env:USERPROFILE\\Documents\",\"$env:USERPROFILE\\Downloads\",\"$env:TEMP\"); $n=0; foreach($d in $dirs){ if(Test-Path $d){ Get-ChildItem $d -Recurse -File -EA SilentlyContinue | ForEach-Object { $f=$_; Get-Item $f.FullName -Stream * -EA SilentlyContinue | Where-Object { $_.Stream -ne ':$DATA' } | ForEach-Object { if($n -lt 25){ Write-Output ($f.FullName + ' :: ' + $_.Stream + ' (' + $_.Length + 'B)') }; $n++ } } } }; Write-Output ('ADS_TOTAL=' + $n)", 120000);
+                string[] lines = (r.Out ?? "").Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                foreach (string ln in lines)
+                {
+                    string t = ln.Trim();
+                    if (t.StartsWith("ADS_TOTAL=")) return OpResult.OK(t + " (details above)");
+                    Kernel.Log("[ADS] " + t);
+                }
+                return OpResult.OK("ADS_TOTAL=0 (no hidden streams found)");
+            }, "Hidden NTFS streams listing (read-only)"));
+            c.Actions.Add(A("48.2", "Remove Mark-of-the-Web from Downloads", RiskLevel.Balanced, delegate(bool dry)
+            {
+                return Kernel.PSCheck("Get-ChildItem \"$env:USERPROFILE\\Downloads\" -Recurse -File -EA SilentlyContinue | Unblock-File -EA SilentlyContinue; 'unblocked'", "MOTW removal", 60000);
+            }, "Zone.Identifier streams removed (SmartScreen/MOTW warnings stop — security tradeoff)"));
+            cats.Add(c);
+
+            // ==================================================================================
+            // CAT 49 (NEW v8.1) — Browser Deep Artifacts
+            // Verified: Crashpad, Site Characteristics Database, GCM Store, Network Persistent State
+            // ==================================================================================
+            c = new Category();
+            c.Num = "49"; c.Tag = "BROWSER DEEP";
+            c.Title = "Chromium/Firefox Deep Artifacts (Crashpad, SiteChar, GCM)";
+            c.Desc = "NEW v8.1: crash reports, site-characteristics LevelDB, push-registration store, HSTS state.";
+            c.Info = "Beyond caches: Crashpad stores crash reports (with URLs in memory dumps); the Site Characteristics LevelDB records per-site background behavior; GCM Store holds push-notification registrations; Network Persistent State + TransportSecurity expose contacted hosts via HSTS entries. All rebuild automatically.";
+            c.InfoPaths = "User Data\\Crashpad\\{reports,metadata}\nUser Data\\*\\Site Characteristics Database\nUser Data\\*\\GCM Store\nUser Data\\*\\{Network Persistent State,TransportSecurity}\nUser Data\\SwReporter\nFirefox: sessionstore-backups, favicons.sqlite, datareporting";
+            c.Actions.Add(A("49.1", "Wipe browser crash reports (Crashpad+Firefox)", RiskLevel.Safe, delegate(bool dry)
+            {
+                if (Kernel.DryRun) { Kernel.Log("[DRY] Crashpad wipe Chrome/Brave/Edge/Firefox"); return OpResult.OK("preview"); }
+                string[] roots = new string[] { LA() + "\\Google\\Chrome\\User Data", LA() + "\\BraveSoftware\\Brave-Browser\\User Data", LA() + "\\Microsoft\\Edge\\User Data" };
+                int n = 0;
+                foreach (string root in roots)
+                {
+                    OpResult r = Kernel.DirWipe(root + "\\Crashpad");
+                    if (r.Ok && !r.Skipped) n++;
+                }
+                OpResult rf = Kernel.DirWipe(LA() + "\\Mozilla\\Firefox\\Crash Reports");
+                if (rf.Ok && !rf.Skipped) n++;
+                if (n == 0) return OpResult.SKIP("no crashpad stores found");
+                return OpResult.OK(n + " crash-report store(s) wiped");
+            }, "Crashpad reports + metadata, Firefox Crash Reports"));
+            c.Actions.Add(A("49.2", "Wipe Site Characteristics databases", RiskLevel.Safe, delegate(bool dry)
+            {
+                return Kernel.PSCheck("$n=0; foreach($b in 'Google\\Chrome','BraveSoftware\\Brave-Browser','Microsoft\\Edge'){ $root=\"$env:LOCALAPPDATA\\$b\\User Data\"; if(Test-Path $root){ Get-ChildItem $root -Directory -EA SilentlyContinue | ForEach-Object { $t=Join-Path $_.FullName 'Site Characteristics Database'; if(Test-Path $t){ Remove-Item $t -Recurse -Force -EA SilentlyContinue; $n++ } } } }; Write-Output ($n.ToString() + ' sitechar-db wiped')", "SiteChar DB", 60000);
+            }, "Per-profile Site Characteristics LevelDB"));
+            c.Actions.Add(A("49.3", "Wipe GCM push-registration store", RiskLevel.Safe, delegate(bool dry)
+            {
+                return Kernel.PSCheck("$n=0; foreach($b in 'Google\\Chrome','BraveSoftware\\Brave-Browser','Microsoft\\Edge'){ $root=\"$env:LOCALAPPDATA\\$b\\User Data\"; if(Test-Path $root){ Get-ChildItem $root -Directory -EA SilentlyContinue | ForEach-Object { $t=Join-Path $_.FullName 'GCM Store'; if(Test-Path $t){ Remove-Item $t -Recurse -Force -EA SilentlyContinue; $n++ } } } }; Write-Output ($n.ToString() + ' gcm stores wiped')", "GCM Store", 60000);
+            }, "GCM Store (site push registrations; sites re-register on next visit)"));
+            c.Actions.Add(A("49.4", "Wipe HSTS/transport state (all profiles)", RiskLevel.Safe, delegate(bool dry)
+            {
+                return Kernel.PSCheck("$n=0; foreach($b in 'Google\\Chrome','BraveSoftware\\Brave-Browser','Microsoft\\Edge'){ $root=\"$env:LOCALAPPDATA\\$b\\User Data\"; if(Test-Path $root){ Get-ChildItem $root -Directory -EA SilentlyContinue | ForEach-Object { foreach($f in 'Network Persistent State','TransportSecurity','TransportSecurity JSON'){ $t=Join-Path $_.FullName $f; if(Test-Path $t){ Remove-Item $t -Force -EA SilentlyContinue; $n++ } } } } }; Write-Output ($n.ToString() + ' transport-state files wiped')", "HSTS state", 60000);
+            }, "Network Persistent State + TransportSecurity (HSTS pins rebuild on browsing)"));
+            c.Actions.Add(A("49.5", "Remove Chrome Software Reporter (SwReporter)", RiskLevel.Safe, delegate(bool dry)
+            {
+                return Kernel.DirDelete(LA() + "\\Google\\Chrome\\User Data\\SwReporter");
+            }, "Chrome Cleanup Tool payloads (phones home to Google)"));
+            c.Actions.Add(A("49.6", "Wipe Firefox session store + favicons", RiskLevel.Balanced, delegate(bool dry)
+            {
+                return Kernel.PSCheck("Get-ChildItem \"$env:LOCALAPPDATA\\Mozilla\\Firefox\\Profiles\" -Directory -EA SilentlyContinue | ForEach-Object { Remove-Item \"$($_.FullName)\\sessionstore-backups\\*\" -Recurse -Force -EA SilentlyContinue; Remove-Item \"$($_.FullName)\\favicons.sqlite\" -Force -EA SilentlyContinue; Remove-Item \"$($_.FullName)\\datareporting\\*\" -Recurse -Force -EA SilentlyContinue }; 'done'", "firefox session", 60000);
+            }, "sessionstore-backups + favicons.sqlite + datareporting (session restore lost)"));
+            cats.Add(c);
+
+            // ==================================================================================
+            // CAT 50 (NEW v8.1) — Vendor Telemetry Pack 2
+            // ==================================================================================
+            c = new Category();
+            c.Num = "50"; c.Tag = "VENDOR TELEMETRY 2";
+            c.Title = "Vendor Telemetry Sweeper (Google/Adobe/generic)";
+            c.Desc = "NEW v8.1: Google Update tasks+services, Adobe AGS, generic telemetry task/service sweepers.";
+            c.Info = "Third-party vendors run their own telemetry. Google Update (gupdate/gupdatem) phones home for usage stats; Adobe Genuine Service monitors installs. The generic sweepers disable ANY non-Microsoft scheduled task/service whose name matches telemetry patterns (Telemetry|CEIP|Survey|Feedback|DiagTrack).";
+            c.InfoPaths = "Tasks: \\GoogleUpdateTaskMachine{Core,UA}\nServices: gupdate, gupdatem, AGSService\nSweeper: Get-ScheduledTask | Where TaskPath !like '\\Microsoft\\*' and name matches telemetry patterns\nCaches: Discord + Spotify";
+            c.Actions.Add(A("50.1", "Disable Google Update scheduled tasks", RiskLevel.Safe, delegate(bool dry)
+            {
+                if (Kernel.DryRun) { Kernel.Log("[DRY] disable GoogleUpdate tasks"); return OpResult.OK("preview"); }
+                string[] tasks = new string[] { "GoogleUpdateTaskMachineCore", "GoogleUpdateTaskMachineUA" };
+                int ok = 0, absent = 0;
+                foreach (string t in tasks)
+                {
+                    ProcResult q = ProcRunner.Run("schtasks.exe", "/Query /TN \" + t + \"", 15000);
+                    if (q.Code != 0) { absent++; continue; }
+                    ProcResult d = ProcRunner.Run("schtasks.exe", "/Change /TN \" + t + \" /Disable", 15000);
+                    if (d.Code == 0) ok++;
+                }
+                if (absent == tasks.Length) return OpResult.SKIP("Google Update tasks not present");
+                return OpResult.OK(ok + " Google Update task(s) disabled (" + absent + " absent)");
+            }, "GoogleUpdateTaskMachineCore/UA"));
+            c.Actions.Add(A("50.2", "Disable Google Update services", RiskLevel.Safe, delegate(bool dry)
+            {
+                if (Kernel.DryRun) { Kernel.Log("[DRY] stop+disable gupdate/gupdatem"); return OpResult.OK("preview"); }
+                string[] svcs = new string[] { "gupdate", "gupdatem" };
+                int n = 0;
+                foreach (string sv in svcs)
+                {
+                    ProcResult q = ProcRunner.Run("powershell.exe", "-NoProfile -NonInteractive -Command \"if(Get-Service -Name '" + sv + "' -EA SilentlyContinue){exit 0}else{exit 1}\"", 15000);
+                    if (q.Code != 0) continue;
+                    Kernel.SvcStopDisable(sv);
+                    n++;
+                }
+                if (n == 0) return OpResult.SKIP("Google Update services not present");
+                return OpResult.OK(n + " Google service(s) stopped+disabled");
+            }, "gupdate + gupdatem"));
+            c.Actions.Add(A("50.3", "Disable Adobe Genuine Service", RiskLevel.Safe, delegate(bool dry)
+            {
+                if (Kernel.DryRun) { Kernel.Log("[DRY] stop+disable AGSService"); return OpResult.OK("preview"); }
+                ProcResult q = ProcRunner.Run("powershell.exe", "-NoProfile -NonInteractive -Command \"if(Get-Service -Name 'AGSService' -EA SilentlyContinue){exit 0}else{exit 1}\"", 15000);
+                if (q.Code != 0) return OpResult.SKIP("Adobe Genuine Service not installed");
+                return Kernel.SvcStopDisable("AGSService");
+            }, "AGSService (Adobe licensing/telemetry watchdog)"));
+            c.Actions.Add(A("50.4", "Sweep non-Microsoft telemetry TASKS", RiskLevel.Safe, delegate(bool dry)
+            {
+                if (Kernel.DryRun) { Kernel.Log("[DRY] telemetry task sweeper"); return OpResult.OK("preview"); }
+                ProcResult r = Kernel.PS("$t=Get-ScheduledTask -EA SilentlyContinue | Where-Object { $_.TaskPath -notlike '\\Microsoft\\*' -and ($_.TaskName -match 'Telemetry|CEIP|Survey|Feedback|DiagTrack|Usage|Report') }; $t | ForEach-Object { Disable-ScheduledTask -TaskName $_.TaskName -TaskPath $_.TaskPath -EA SilentlyContinue | Out-Null; Write-Output $_.TaskName }; Write-Output ('SWEEP_COUNT=' + @($t).Count)", 60000);
+                string[] lines = (r.Out ?? "").Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                foreach (string ln in lines)
+                {
+                    string t2 = ln.Trim();
+                    if (t2.StartsWith("SWEEP_COUNT=")) return OpResult.OK(t2.Replace("SWEEP_COUNT=", "swept tasks: "));
+                    Kernel.Log("[SWEEP] " + t2);
+                }
+                return OpResult.OK("swept tasks: 0 (nothing matched)");
+            }, "Non-MS tasks matching Telemetry|CEIP|Survey|Feedback|Usage|Report"));
+            c.Actions.Add(A("50.5", "Sweep non-Microsoft telemetry SERVICES", RiskLevel.Safe, delegate(bool dry)
+            {
+                if (Kernel.DryRun) { Kernel.Log("[DRY] telemetry service sweeper"); return OpResult.OK("preview"); }
+                ProcResult r = Kernel.PS("$s=Get-Service -EA SilentlyContinue | Where-Object { $_.DisplayName -match 'Telemetry|CEIP|Feedback' }; $s | ForEach-Object { Stop-Service $_ -Force -EA SilentlyContinue; Set-Service $_ -StartupType Disabled -EA SilentlyContinue; Write-Output $_.Name }; Write-Output ('SWEEP_COUNT=' + @($s).Count)", 60000);
+                string[] lines = (r.Out ?? "").Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                foreach (string ln in lines)
+                {
+                    string t2 = ln.Trim();
+                    if (t2.StartsWith("SWEEP_COUNT=")) return OpResult.OK(t2.Replace("SWEEP_COUNT=", "swept services: "));
+                    Kernel.Log("[SWEEP] " + t2);
+                }
+                return OpResult.OK("swept services: 0 (nothing matched)");
+            }, "Any service with Telemetry|CEIP|Feedback in display name"));
+            c.Actions.Add(A("50.6", "Clear Discord & Spotify caches", RiskLevel.Safe, delegate(bool dry)
+            {
+                OpResult r1 = Kernel.DirWipe(AP() + "\\discord\\Cache");
+                Kernel.DirWipe(AP() + "\\discord\\Code Cache");
+                Kernel.DirWipe(AP() + "\\discord\\GPUCache");
+                Kernel.DirWipe(AP() + "\\Spotify\\Storage");
+                Kernel.DirWipe(AP() + "\\Spotify\\Data");
+                return r1;
+            }, "Discord Cache/GPUCache + Spotify Storage/Data"));
+            cats.Add(c);
+
+            // ==================================================================================
+            // CAT 51 (NEW v8.1) — Modern AI Era (24H2/25H2)
+            // Verified: DisableClickToDo (WindowsAI CSP), Copilot/DevHome Appx removal
+            // ==================================================================================
+            c = new Category();
+            c.Num = "51"; c.Tag = "MODERN AI ERA";
+            c.Title = "24H2/25H2 AI Surface (Click to Do, Copilot, Dev Home)";
+            c.Desc = "NEW v8.1: Click to Do policy off, Copilot & Dev Home apps removed, Office AI logs wiped.";
+            c.Info = "Beyond Recall (cat 27): 'Click to Do' (Win+click AI actions on screen content) has its own Microsoft-documented policy DisableClickToDo. The standalone Copilot and Dev Home packaged apps are removable via Appx (re-installable from Store). Office AI/telemetry logs are swept from the Office folder.";
+            c.InfoPaths = "HKCU\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI -> DisableClickToDo=1 (learn.microsoft.com -> manage-click-to-do)\nGet-AppxPackage Microsoft.Copilot | Remove-AppxPackage\nGet-AppxPackage Microsoft.Windows.DevHome | Remove-AppxPackage\n%LOCALAPPDATA%\\Microsoft\\Office\\**\\*.log,*.etl";
+            c.Actions.Add(A("51.1", "Disable Click to Do (24H2 policy)", RiskLevel.Safe, delegate(bool dry)
+            {
+                return Kernel.RegSet("HKCU\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI", "DisableClickToDo", 1, RegistryValueKind.DWord);
+            }, "DisableClickToDo=1 (Win+click AI overlay off; entry points removed)"));
+            c.Actions.Add(A("51.2", "Remove standalone Copilot app", RiskLevel.Balanced, delegate(bool dry)
+            {
+                return Kernel.PSCheck("Get-AppxPackage Microsoft.Copilot -EA SilentlyContinue | Remove-AppxPackage -EA SilentlyContinue; 'copilot-app removed (re-installable from Store)'", "Copilot appx", 60000);
+            }, "Microsoft.Copilot Appx (Store reinstall available)"));
+            c.Actions.Add(A("51.3", "Remove Dev Home app", RiskLevel.Balanced, delegate(bool dry)
+            {
+                return Kernel.PSCheck("Get-AppxPackage Microsoft.Windows.DevHome -EA SilentlyContinue | Remove-AppxPackage -EA SilentlyContinue; 'devhome removed'", "Dev Home appx", 60000);
+            }, "Microsoft.Windows.DevHome Appx"));
+            c.Actions.Add(A("51.4", "Wipe Office AI/telemetry logs", RiskLevel.Safe, delegate(bool dry)
+            {
+                return Kernel.PSCheck("$n=0; if(Test-Path \"$env:LOCALAPPDATA\\Microsoft\\Office\"){ Get-ChildItem \"$env:LOCALAPPDATA\\Microsoft\\Office\" -Recurse -Include *.log,*.etl -File -EA SilentlyContinue | ForEach-Object { Remove-Item $_.FullName -Force -EA SilentlyContinue; $n++ } }; Write-Output ($n.ToString() + ' office log files wiped')", "Office logs", 60000);
+            }, "Office *.log/*.etl under %LOCALAPPDATA%\\Microsoft\\Office"));
+            cats.Add(c);
+
             return cats;
         }
 
@@ -2330,6 +2668,55 @@ namespace STEALTH
         }
     }
 
+
+    // ======================================================================================
+    // APP SETTINGS — persists execution toggles (dry-run / backup / quarantine) as a tiny
+    // INI so the tool remembers its safety posture across sessions.
+    // ======================================================================================
+
+    public static class AppSettings
+    {
+        private static string IniPath()
+        {
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "STEALTH", "settings.ini");
+        }
+
+        public static void Load()
+        {
+            try
+            {
+                if (!File.Exists(IniPath())) return;
+                foreach (string line in File.ReadAllLines(IniPath()))
+                {
+                    string t = line.Trim();
+                    int eq = t.IndexOf('=');
+                    if (eq <= 0) continue;
+                    string k = t.Substring(0, eq).Trim();
+                    string v = t.Substring(eq + 1).Trim();
+                    bool on = v == "1" || v.Equals("true", StringComparison.OrdinalIgnoreCase) || v.Equals("on", StringComparison.OrdinalIgnoreCase);
+                    if (k == "DryRun") Kernel.DryRun = on;
+                    else if (k == "BackupOn") Kernel.BackupOn = on;
+                    else if (k == "QuarantineOn") Kernel.QuarantineOn = on;
+                }
+            }
+            catch { }
+        }
+
+        public static void Save()
+        {
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(IniPath()));
+                File.WriteAllLines(IniPath(), new string[] {
+                    "DryRun=" + (Kernel.DryRun ? "1" : "0"),
+                    "BackupOn=" + (Kernel.BackupOn ? "1" : "0"),
+                    "QuarantineOn=" + (Kernel.QuarantineOn ? "1" : "0")
+                });
+            }
+            catch { }
+        }
+    }
+
     // ======================================================================================
     // APPLICATION ENTRY — GUI by default, headless CLI via switches:
     //   S-T-E-A-L-T-H.exe /sweep /profile:Balanced /dry   (Safe|Balanced|Paranoid)
@@ -2344,14 +2731,18 @@ namespace STEALTH
         [STAThread]
         public static void Main(string[] args)
         {
-            bool sweep = false, audit = false, restore = false, dry = false;
-            string profile = "Balanced", outPath = null, restoreDir = null;
+            bool sweep = false, audit = false, restore = false, dry = false, help = false, list = false;
+            string profile = "Balanced", outPath = null, restoreDir = null, runTarget = null;
             if (args != null)
             {
-                foreach (string raw in args)
+                for (int i = 0; i < args.Length; i++)
                 {
+                    string raw = args[i];
                     string s = raw.ToLowerInvariant();
-                    if (s.EndsWith("sweep")) sweep = true;
+                    if (s.EndsWith("help")) help = true;
+                    else if (s.EndsWith("list")) list = true;
+                    else if (s.EndsWith("run")) { if (i + 1 < args.Length) { runTarget = args[i + 1]; i++; } }
+                    else if (s.EndsWith("sweep")) sweep = true;
                     else if (s.EndsWith("dry")) dry = true;
                     else if (s.EndsWith("audit")) audit = true;
                     else if (s.EndsWith("restore")) restore = true;
@@ -2362,6 +2753,21 @@ namespace STEALTH
                     else if (s.StartsWith("/dir:")) restoreDir = raw.Substring(5).Trim('"');
                     else if (s.StartsWith("--dir:")) restoreDir = raw.Substring(6).Trim('"');
                 }
+            }
+            if (help)
+            {
+                PrintHelp();
+                return;
+            }
+            if (list)
+            {
+                PrintList();
+                return;
+            }
+            if (runTarget != null)
+            {
+                RunSingle(runTarget, dry);
+                return;
             }
             if (sweep)
             {
@@ -2396,13 +2802,67 @@ namespace STEALTH
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Fatal Error: " + ex.Message, "S-T-E-A-L-T-H v8.0", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("Fatal Error: " + ex.Message, "S-T-E-A-L-T-H v8.1", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        private static void PrintHelp()
+        {
+            Console.WriteLine("S-T-E-A-L-T-H v8.1 ADVANCED — CLI usage:");
+            Console.WriteLine("  /sweep /profile:Safe|Balanced|Paranoid [/dry]   run the full protocol");
+            Console.WriteLine("  /run <action-number> [/dry]                     run ONE action, e.g. /run 13.1");
+            Console.WriteLine("  /list                                           list all vectors and actions");
+            Console.WriteLine("  /audit [/out:\"file.html\"]                      read-only privacy report");
+            Console.WriteLine("  /restore /dir:\"<session folder>\"               restore a backup session");
+            Console.WriteLine("  /help                                           this help");
+        }
+
+        private static void PrintList()
+        {
+            List<Category> cats = ActionRegistry.Build();
+            int actions = 0;
+            foreach (Category c in cats)
+            {
+                Console.WriteLine("[" + c.Num + "] " + c.Title + "  {" + string.Join(", ", new string[] { c.Risk().ToString() }) + (c.Destructive() ? ", DESTRUCTIVE-CAPABLE" : "") + "}");
+                foreach (StealthAction a in c.Actions)
+                {
+                    Console.WriteLine("     " + a.Num.PadRight(6) + a.Title + (a.Destructive ? "  [DESTRUCTIVE]" : ""));
+                    actions++;
+                }
+            }
+            Console.WriteLine("TOTAL: " + cats.Count + " vectors, " + actions + " actions");
+        }
+
+        private static void RunSingle(string num, bool dry)
+        {
+            Kernel.DryRun = dry;
+            Kernel.Log = delegate(string m) { Console.WriteLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] " + m); };
+            List<Category> cats = ActionRegistry.Build();
+            foreach (Category c in cats)
+            {
+                foreach (StealthAction a in c.Actions)
+                {
+                    if (a.Num == num || (c.Num + "." + a.Num) == num)
+                    {
+                        Console.WriteLine("[RUN] " + (a.Num.Contains(".") ? a.Num : c.Num + "." + a.Num) + " " + a.Title + (dry ? " (DRY)" : ""));
+                        if (!dry && Kernel.BackupOn)
+                        {
+                            BackupManager bm = new BackupManager();
+                            bm.StartSession(); Kernel.Backup = bm;
+                        }
+                        OpResult r = a.Run(dry);
+                        Console.WriteLine("[" + (r.Ok ? (r.Skipped ? "SKIP" : "OK") : "FAIL") + "] " + r.Detail);
+                        if (Kernel.Backup != null) Kernel.Backup.FinishSession();
+                        return;
+                    }
+                }
+            }
+            Console.WriteLine("[RUN] action not found: " + num + " — use /list to see all action numbers.");
         }
 
         private static void CliSweep(string profile, bool dry)
         {
-            Console.WriteLine("=== S-T-E-A-L-T-H v8.0 headless sweep (" + profile + (dry ? ", DRY-RUN" : "") + ") ===");
+            Console.WriteLine("=== S-T-E-A-L-T-H v8.1 ADVANCED headless sweep (" + profile + (dry ? ", DRY-RUN" : "") + ") ===");
             if (!Kernel.IsAdmin()) Console.WriteLine("[WARN] not elevated — many operations will fail honestly below.");
             RiskLevel target = RiskLevel.Balanced;
             if (profile.Equals("Safe", StringComparison.OrdinalIgnoreCase)) target = RiskLevel.Safe;
@@ -2421,6 +2881,7 @@ namespace STEALTH
                     Console.WriteLine("--- [" + cat.Num + "] " + cat.Title);
                     foreach (StealthAction a in cat.Actions)
                     {
+                        if (Kernel.CancelRequested) { Kernel.CancelRequested = false; Console.WriteLine("[CANCEL] sweep cancelled by user."); return; }
                         if (a.Risk > target) { skip++; continue; }
                         if (a.Destructive && target != RiskLevel.Paranoid) { skip++; continue; }
                         OpResult r = a.Run(Kernel.DryRun);
@@ -2707,7 +3168,7 @@ namespace STEALTH
 
         public MainWindow()
         {
-            this.Title = "S-T-E-A-L-T-H v8.0 — Absolute Forensic Annihilation Suite";
+            this.Title = "S-T-E-A-L-T-H v8.1 ADVANCED — Absolute Forensic Annihilation Suite";
             this.WindowStyle = WindowStyle.None;
             this.AllowsTransparency = true;
             this.Background = Brushes.Transparent;
@@ -2736,12 +3197,13 @@ namespace STEALTH
             allCats = ActionRegistry.Build();
             ThemeManager.Load();
             ThemeManager.Apply();
+            AppSettings.Load();
             BuildUI();
             WireShell();
             StartHud();
             if (!Kernel.IsAdmin()) AppendLog("[WARN] NOT RUNNING AS ADMINISTRATOR — protected operations will FAIL and be reported as such.");
             else AppendLog("[OK] elevated — full access.");
-            AppendLog("S-T-E-A-L-T-H v8.0 online. 46 vectors | " + CountActions() + " micro-actions | Dry-Run, Backup, Quarantine, Audit, Scheduler ready.");
+            AppendLog("S-T-E-A-L-T-H v8.1 ADVANCED online. " + allCats.Count + " vectors | " + CountActions() + " micro-actions | Dry-Run, Backup, Quarantine, Audit, Scheduler, ADS, Persistence-Audit ready.");
             AppendLog("Pick a profile (Safe/Balanced/Paranoid) and hit the master button, or click any granular action.");
         }
 
@@ -3086,9 +3548,9 @@ namespace STEALTH
                     </Border>
                     <TextBlock Text=""S - T - E - A - L - T - H"" FontSize=""21"" FontWeight=""ExtraBold"" Foreground=""{DynamicResource WinBorder}""/>
                     <Border Background=""{DynamicResource VerBadgeBg}"" CornerRadius=""6"" Padding=""8,3"" Margin=""12,0,0,0"">
-                        <TextBlock Text=""v8.0 ABSOLUTE"" FontSize=""10.5"" FontWeight=""Bold"" Foreground=""{DynamicResource VerBadgeFg}""/>
+                        <TextBlock Text=""v8.1 ADVANCED"" FontSize=""10.5"" FontWeight=""Bold"" Foreground=""{DynamicResource VerBadgeFg}""/>
                     </Border>
-                    <TextBlock Text=""// 46-VECTOR ENGINE · DRY-RUN · BACKUP · QUARANTINE · AUDIT · SCHEDULER"" FontSize=""10.5"" Foreground=""{DynamicResource TextMuted}"" VerticalAlignment=""Center"" Margin=""10,0,0,0""/>
+                    <TextBlock Text=""// 53-VECTOR ENGINE · DRY-RUN · BACKUP · QUARANTINE · AUDIT · SCHEDULER · PERSISTENCE AUDIT · ADS"" FontSize=""10.5"" Foreground=""{DynamicResource TextMuted}"" VerticalAlignment=""Center"" Margin=""10,0,0,0""/>
                 </StackPanel>
                 <StackPanel Grid.Column=""1"" Orientation=""Horizontal"">
                     <Button x:Name=""BtnMenu"" Content=""≡"" Width=""32"" Height=""32"" Background=""Transparent"" Foreground=""{DynamicResource TextSecondary}"" FontSize=""16"" FontWeight=""Bold"" BorderThickness=""0"" Cursor=""Hand"" Margin=""0,0,10,0""/>
@@ -3143,6 +3605,7 @@ namespace STEALTH
                     <Button x:Name=""BtnBackup"" Style=""{StaticResource ToolBtn}"" Content=""💾 BACKUP: ON"" Height=""30""/>
                     <Button x:Name=""BtnQuarantine"" Style=""{StaticResource ToolBtn}"" Content=""📦 QUARANTINE: ON"" Height=""30""/>
                     <Button x:Name=""BtnTheme"" Style=""{StaticResource ToolBtn}"" Content=""◐ THEME"" Height=""30""/>
+                    <Button x:Name=""BtnCancel"" Style=""{StaticResource ToolBtn}"" Content=""✖ CANCEL"" Height=""30""/>
                     <TextBox x:Name=""TxtSearch"" Width=""200"" Height=""30"" VerticalContentAlignment=""Center"" Padding=""6,0"" Margin=""10,0,0,0"" FontSize=""11""/>
                     <TextBlock Text=""🔍 filter"" FontSize=""10"" Foreground=""{DynamicResource TextMuted}"" VerticalAlignment=""Center"" Margin=""6,0,0,0""/>
                 </StackPanel>
@@ -3171,7 +3634,7 @@ namespace STEALTH
                                     <GradientStop Color=""#38BDF8"" Offset=""0.5""/>
                                     <GradientStop Color=""#2563EB"" Offset=""1.0""/>
                                 </LinearGradientBrush></Border.Background>
-                                <TextBlock x:Name=""MTxt"" Text=""⚡ INITIATE 46-VECTOR PROTOCOL ⚡"" Foreground=""#030712"" FontSize=""12"" FontWeight=""ExtraBold"" HorizontalAlignment=""Center"" VerticalAlignment=""Center"" TextAlignment=""Center""/>
+                                <TextBlock x:Name=""MTxt"" Text=""⚡ INITIATE 53-VECTOR PROTOCOL ⚡"" Foreground=""#030712"" FontSize=""12"" FontWeight=""ExtraBold"" HorizontalAlignment=""Center"" VerticalAlignment=""Center"" TextAlignment=""Center""/>
                             </Border>
                             <ControlTemplate.Triggers>
                                 <Trigger Property=""IsMouseOver"" Value=""True"">
@@ -3515,7 +3978,7 @@ namespace STEALTH
             btnMenuAbout.Click += delegate
             {
                 MessageBox.Show(this,
-                    "S - T - E - A - L - T - H  v8.0 ABSOLUTE\n\n" +
+                    "S - T - E - A - L - T - H  v8.1 ADVANCED\n\n" +
                     "46-Vector Absolute Forensic Annihilation Suite\n" +
                     "161 granular actions \u00B7 Dry-Run \u00B7 Backup/Restore \u00B7 Quarantine\n" +
                     "3-Pass Shredder \u00B7 Privacy Audit \u00B7 Scheduler \u00B7 Headless CLI\n" +
@@ -3544,7 +4007,7 @@ namespace STEALTH
                     MessageBoxResult mbr = MessageBox.Show(this,
                         "PARANOID profile will execute " + desCount + " DESTRUCTIVE actions:\n\n" + desList.ToString() +
                         "\nBackups/quarantine still apply where possible, but several of these are IRREVERSIBLE (VSS shadows, browser history, WiFi passwords).\n\nContinue?",
-                        "S-T-E-A-L-T-H v8.0 — Paranoid Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                        "S-T-E-A-L-T-H v8.1 — Paranoid Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Warning);
                     if (mbr != MessageBoxResult.Yes) { AppendLog("[CANCEL] Paranoid master protocol cancelled by user."); return; }
                 }
                 RunAsync(MasterProtocol);
@@ -3690,7 +4153,15 @@ namespace STEALTH
             btnCloseModal.Click += delegate { infoModal.Visibility = Visibility.Collapsed; };
             btnModalGotIt.Click += delegate { infoModal.Visibility = Visibility.Collapsed; };
 
+            var btnCancel = (Button)LogicalTreeHelper.FindLogicalNode(root, "BtnCancel");
+            btnCancel.Click += delegate
+            {
+                Kernel.CancelRequested = true;
+                AppendLog("[CANCEL] cancellation requested — stops after the current action.");
+            };
+
             ResetCounters();
+            RefreshMenuLabels();
         }
 
         // ------------------------------------------------------------------ native resize
@@ -3762,6 +4233,7 @@ namespace STEALTH
         private void ToggleDryRun()
         {
             Kernel.DryRun = !Kernel.DryRun;
+            AppSettings.Save();
             RefreshMenuLabels();
             AppendLog(Kernel.DryRun ? "[MODE] DRY-RUN enabled — nothing will be modified, every planned op is previewed." : "[MODE] DRY-RUN disabled — live execution.");
         }
@@ -3769,6 +4241,7 @@ namespace STEALTH
         private void ToggleBackup()
         {
             Kernel.BackupOn = !Kernel.BackupOn;
+            AppSettings.Save();
             RefreshMenuLabels();
             AppendLog("[MODE] registry backup " + (Kernel.BackupOn ? "ENABLED (reg export before every key mutation)" : "DISABLED (not recommended)"));
         }
@@ -3776,6 +4249,7 @@ namespace STEALTH
         private void ToggleQuarantine()
         {
             Kernel.QuarantineOn = !Kernel.QuarantineOn;
+            AppSettings.Save();
             RefreshMenuLabels();
             AppendLog("[MODE] file quarantine " + (Kernel.QuarantineOn ? "ENABLED (files moved to quarantine, restorable)" : "DISABLED (files hard-deleted, sizes recorded in manifest)"));
         }
@@ -3905,7 +4379,7 @@ namespace STEALTH
             {
                 MessageBoxResult mbr = MessageBox.Show(this,
                     "DESTRUCTIVE ACTION [" + a.Num + "]: " + a.Title + "\n\n" + a.Info + "\n\nContinue?",
-                    "S-T-E-A-L-T-H v8.0 — Destructive Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                    "S-T-E-A-L-T-H v8.1 — Destructive Confirmation", MessageBoxButton.YesNo, MessageBoxImage.Warning);
                 if (mbr != MessageBoxResult.Yes) { AppendLog("[CANCEL] " + a.Num + " cancelled by user."); return; }
             }
             RunAsync(delegate
@@ -3932,6 +4406,7 @@ namespace STEALTH
                 int localOk = 0, localFail = 0, localSkip = 0;
                 foreach (StealthAction a in c.Actions)
                 {
+                    if (Kernel.CancelRequested) { Kernel.CancelRequested = false; AppendLog("[CANCEL] category run cancelled."); break; }
                     if (a.Destructive)
                     {
                         AppendLog("[SKIP] " + a.Num + " destructive — click it directly or use Paranoid master profile.");
@@ -3968,6 +4443,7 @@ namespace STEALTH
             AppendLog("===============================================================");
 
             ResetCounters();
+            Kernel.CancelRequested = false;
             if (!Kernel.DryRun)
             {
                 BackupManager bm = new BackupManager();
@@ -3976,6 +4452,7 @@ namespace STEALTH
                 if (!Kernel.BackupOn) AppendLog("[BACKUP] disabled by user — registry changes NOT exported (not recommended).");
             }
             else AppendLog("[DRY] preview mode — no changes will be made.");
+            bool cancelled = false;
 
             List<Category> cats = allCats;
             int total = 0;
@@ -3993,14 +4470,22 @@ namespace STEALTH
                 AppendLog("────── [" + cat.Num + "] " + cat.Title + " ──────");
                 foreach (StealthAction a in cat.Actions)
                 {
+                    if (Kernel.CancelRequested) { Kernel.CancelRequested = false; cancelled = true; break; }
                     if (a.Risk > target) continue;
                     if (a.Destructive && target != RiskLevel.Paranoid) continue;
                     OpResult r = a.Run(Kernel.DryRun);
                     LogResult(a.Num + " " + a.Title, r);
                     done++;
-                    Dispatcher.Invoke((Action)(delegate { prgBar.Value = (double)done / Math.Max(1, total) * 100.0; }));
+                    int doneCopy = done; StealthAction aCopy = a;
+                    Dispatcher.Invoke((Action)(delegate
+                    {
+                        prgBar.Value = (double)doneCopy / Math.Max(1, total) * 100.0;
+                        this.Title = "S-T-E-A-L-T-H v8.1 — " + doneCopy + "/" + total + " (" + (int)(doneCopy * 100.0 / Math.Max(1, total)) + "%) · running " + aCopy.Num;
+                    }));
                 }
+                if (cancelled) break;
             }
+            Dispatcher.Invoke((Action)(delegate { this.Title = "S-T-E-A-L-T-H v8.1 ADVANCED — Absolute Forensic Annihilation Suite"; }));
             if (!Kernel.DryRun && Kernel.Backup != null) Kernel.Backup.FinishSession();
             AppendLog("===============================================================");
             AppendLog("\uD83C\uDF89 PROTOCOL COMPLETE — " + profile.ToUpper() + ": OK " + okCount + " | FAILED " + failCount + " | SKIPPED " + skipCount);

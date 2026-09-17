@@ -1,7 +1,9 @@
-# 🛡️ S-T-E-A-L-T-H (v8.0 ABSOLUTE)
+# 🛡️ S-T-E-A-L-T-H (v8.1 ADVANCED)
 
 > **Absolute Forensic Annihilation, Windows Deep Privacy & Identity Suite**
-> Native C# WPF GUI · **46 Vectors · 161 Granular Actions** · Dry-Run Preview · Automatic Backup & Restore · File Quarantine · 3-Pass Shredder · Read-Only Privacy Audit · Task Scheduler · Headless CLI
+> Native C# WPF GUI · **53 Vectors · 194 Granular Actions** · Dry-Run · Backup/Restore · Quarantine · 3-Pass Shredder · Privacy Audit w/ Score · Scheduler · Headless CLI (/help /list /run) · Cancel · Settings Persistence · Native Edge-Resize · Hamburger Menu · Dark/Light
+
+**v8.1 ADVANCED additions:** Network Hardening Pro (NetBIOS/mDNS/SMBv1/SMB-signing/NTLMv2) · Credential & Vault hygiene · Persistence Audit & WMI subscription cleanup (MITRE T1546.003 defensive) · NTFS ADS scanner · Browser deep artifacts (Crashpad/SiteChar/GCM/HSTS) · Vendor telemetry sweepers (Google/Adobe/generic) · Modern AI era (Click to Do/Copilot/Dev Home)
 
 ---
 
@@ -31,9 +33,9 @@ v7.0 had 34 vectors whose "[OK]" messages were printed even when operations sile
 
 | Specification | Details |
 | :--- | :--- |
-| Version | **v8.0 ABSOLUTE** |
-| Vectors | **46 categories** (0, 00, 1–32 original + 33–44 new) |
-| Granular actions | **161** micro-action buttons |
+| Version | **v8.1 ADVANCED** |
+| Vectors | **53 categories** (0, 00, 1–32 original + 33–44 v8.0 + 45–51 v8.1) |
+| Granular actions | **194** micro-action buttons |
 | Interface | WPF GUI: **Dark / Light / System themes**, live HUD, result counters, search filter, 5 modals, DPI-aware fit-to-screen |
 | Engine | Central Kernel: registry / files / services / processes with Dry-Run + backup hooks |
 | Backup store | `C:\ProgramData\STEALTH\backups\session-YYYYMMDD-HHMMSS\` |
