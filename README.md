@@ -1,7 +1,15 @@
 # 🛡️ S-T-E-A-L-T-H (v8.1 ADVANCED)
 
+[![Language: C#](https://img.shields.io/badge/Language-C%23%20%7C%20WPF-blue.svg?logo=csharp)](S-T-E-A-L-T-H.cs)
+[![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011%20x64-0078D6.svg?logo=windows)](S-T-E-A-L-T-H.exe)
+[![Domain: Anti-Forensics & VAPT](https://img.shields.io/badge/Domain-Anti--Forensics%20%26%20Hardening-red.svg)](#the-46-vector-matrix)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/Shivam990q/S-T-E-A-L-T-H?color=orange&logo=github)](https://github.com/Shivam990q/S-T-E-A-L-T-H/releases)
+
 > **Absolute Forensic Annihilation, Windows Deep Privacy & Identity Suite**
 > Native C# WPF GUI · **53 Vectors · 194 Granular Actions** · Dry-Run · Backup/Restore · Quarantine · 3-Pass Shredder · Privacy Audit w/ Score · Scheduler · Headless CLI (/help /list /run) · Cancel · Settings Persistence · Native Edge-Resize · Hamburger Menu · Dark/Light
+
+Developed by **Shivam Gupta** ([@Shivam990q](https://github.com/Shivam990q)).
 
 **v8.1 ADVANCED additions:** Network Hardening Pro (NetBIOS/mDNS/SMBv1/SMB-signing/NTLMv2) · Credential & Vault hygiene · Persistence Audit & WMI subscription cleanup (MITRE T1546.003 defensive) · NTFS ADS scanner · Browser deep artifacts (Crashpad/SiteChar/GCM/HSTS) · Vendor telemetry sweepers (Google/Adobe/generic) · Modern AI era (Click to Do/Copilot/Dev Home)
 
@@ -157,3 +165,14 @@ Manual (single line per compile):
 
 ## 🔒 Security & Privacy Notice
 For authorized privacy enhancement, digital hygiene and defensive auditing on systems you own. All registry mutations are export-backed; all file removals are quarantined and restorable via the built-in Restore Session tool.
+
+---
+
+## 📜 License & Credits
+
+This project is licensed under the [MIT License](LICENSE).
+
+**Engineered by Shivam Gupta**
+* **Portfolio**: [shivam-portfolio-a1s4.onrender.com](https://shivam-portfolio-a1s4.onrender.com)
+* **GitHub**: [@Shivam990q](https://github.com/Shivam990q)
+* **LinkedIn**: [Shivam Gupta](https://www.linkedin.com/in/shivamg031)
